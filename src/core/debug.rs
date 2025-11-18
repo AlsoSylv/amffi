@@ -3,12 +3,18 @@ use crate::stdcall;
 #[repr(C)]
 pub struct AMFDebug(*mut *const AMFDebugVtbl);
 
+impl Default for AMFDebug {
+    fn default() -> Self {
+        AMFDebug(std::ptr::null_mut())
+    }
+}
+
 #[repr(C)]
 pub struct AMFDebugVtbl {
-    enable_performance_monitor: stdcall!(fn(this: *mut *const AMFDebugVtbl, enable: bool)),
-    performance_monitor_enabled: stdcall!(fn(this: *mut *const AMFDebugVtbl) -> bool),
-    asserts_enable: stdcall!(fn(this: *mut *const AMFDebugVtbl, enable: bool)),
-    asserts_enabled: stdcall!(fn(this: *mut *const AMFDebugVtbl) -> bool),
+    enable_performance_monitor: stdcall!(fn(this: *mut *const Self, enable: bool)),
+    performance_monitor_enabled: stdcall!(fn(this: *mut *const Self) -> bool),
+    asserts_enable: stdcall!(fn(this: *mut *const Self, enable: bool)),
+    asserts_enabled: stdcall!(fn(this: *mut *const Self) -> bool),
 }
 
 impl AMFDebug {
@@ -25,10 +31,12 @@ impl AMFDebug {
         unsafe { (self.vtable().asserts_enabled)(self.as_raw()) }
     }
 
+    #[inline(always)]
     unsafe fn vtable(&self) -> &AMFDebugVtbl {
         unsafe { &**self.as_raw() }
     }
 
+    #[inline(always)]
     unsafe fn as_raw(&self) -> *mut *const AMFDebugVtbl {
         self.0
     }

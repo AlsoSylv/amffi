@@ -207,6 +207,7 @@ impl AMFSurface {
         unsafe { (self.vtable().set_crop)(self.as_raw(), x, y, width, height) }.into_error()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn copy_surface_region(
         &self,
         dst: &mut AMFSurface,
