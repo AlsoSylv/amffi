@@ -26,6 +26,12 @@ pub const AMF_TRACE_WRITER_FILE: &WideCStr = widecstr!("File");
 #[repr(transparent)]
 pub struct AMFTrace(*mut *const AMFTraceVtbl);
 
+impl Default for AMFTrace {
+    fn default() -> Self {
+        Self(std::ptr::null_mut())
+    }
+}
+
 #[repr(C)]
 pub struct AMFTraceVtbl {
     trace_w: stdcall!(
@@ -53,14 +59,42 @@ pub struct AMFTraceVtbl {
     ),
     set_global_level: stdcall!(fn(this: *mut *const Self, level: i32) -> i32),
     get_global_level: stdcall!(fn(this: *mut *const Self) -> i32),
-    enable_writer: stdcall!(fn(this: *mut *const Self, writer_id: *const WideChar, enable: bool) -> bool),
+    enable_writer:
+        stdcall!(fn(this: *mut *const Self, writer_id: *const WideChar, enable: bool) -> bool),
     writer_enabled: stdcall!(fn(this: *mut *const Self, writer_id: *const WideChar) -> bool),
     trace_enable_async: stdcall!(fn(this: *mut *const Self, enable: bool) -> AMFResult),
     trace_flush: stdcall!(fn(this: *mut *const Self) -> AMFResult),
     set_path: stdcall!(fn(this: *mut *const Self, path: *const WideChar) -> AMFResult),
-    get_path: stdcall!(fn(this: *mut *const Self, path: *mut WideChar, size: *mut isize) -> AMFResult),
-    set_writer_level: stdcall!(fn(this: *mut *const Self, writer_id: *const WideChar, level: i32) -> i32),
+    get_path:
+        stdcall!(fn(this: *mut *const Self, path: *mut WideChar, size: *mut isize) -> AMFResult),
+    set_writer_level:
+        stdcall!(fn(this: *mut *const Self, writer_id: *const WideChar, level: i32) -> i32),
     get_writer_level: stdcall!(fn(this: *mut *const Self, writer_id: *const WideChar) -> i32),
-    set_writer_level_for_scope: stdcall!(fn(this: *mut *const Self, writer_id: *const WideChar, scope: *const WideChar, level: i32) -> i32),
-    get_writer_level_for_scope: stdcall!(fn(this: *mut *const Self, writer_id: *const WideChar, scope: *const WideChar) -> i32),
+    set_writer_level_for_scope: stdcall!(
+        fn(
+            this: *mut *const Self,
+            writer_id: *const WideChar,
+            scope: *const WideChar,
+            level: i32,
+        ) -> i32
+    ),
+    get_writer_level_for_scope: stdcall!(
+        fn(this: *mut *const Self, writer_id: *const WideChar, scope: *const WideChar) -> i32
+    ),
+}
+
+impl AMFTrace {
+    #[inline(always)]
+    unsafe fn as_raw(&self) -> *mut *const AMFTraceVtbl {
+        self.0
+    }
+
+    #[inline(always)]
+    unsafe fn vtable(&self) -> &AMFTraceVtbl {
+        unsafe { &**self.as_raw() }
+    }
+
+    pub fn set_writer_enabled(&self, writer_id: &WideCStr, enabled: bool) -> bool {
+        unsafe { (self.vtable().enable_writer)(self.as_raw(), writer_id.as_ptr(), enabled) }
+    }
 }

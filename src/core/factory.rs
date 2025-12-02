@@ -1,4 +1,7 @@
-use std::{path::{Path, PathBuf}, ptr::null_mut};
+use std::{
+    path::{Path, PathBuf},
+    ptr::null_mut,
+};
 
 use widestring::{WideCStr, WideChar};
 
@@ -8,6 +11,7 @@ use crate::{
         debug::AMFDebug,
         interface::Interface,
         result::{AMFError, AMFResult},
+        trace::AMFTrace,
     },
     stdcall,
 };
@@ -59,17 +63,12 @@ pub struct AMFFactoryVtbl {
         ) -> AMFResult
     ),
     // TODO: Expose in wrapper function
-    set_cache_folder: stdcall!(
-        fn(
-            this: *mut *const Self,
-            path: *const WideChar,
-        ) -> AMFResult
-    ),
+    set_cache_folder: stdcall!(fn(this: *mut *const Self, path: *const WideChar) -> AMFResult),
     // TODO: Expose in wrapper function
     get_cache_folder: stdcall!(fn(this: *mut *const Self) -> *const WideChar),
     get_debug: stdcall!(fn(this: *mut *const Self, debug: *mut AMFDebug) -> AMFResult),
     // TODO: Add trace support
-    get_trace: *mut (),
+    get_trace: stdcall!(fn(this: *mut *const Self, trace: *mut AMFTrace) -> AMFResult),
     // TODO: Add programs support
     get_programs: *mut (),
 }
@@ -125,6 +124,12 @@ impl AMFFactory {
         let mut debug = AMFDebug::default();
         unsafe { (self.vtable().get_debug)(self.as_raw(), &raw mut debug).into_error()? };
         Ok(debug)
+    }
+
+    pub fn get_trace(&self) -> Result<AMFTrace, AMFError> {
+        let mut trace = AMFTrace::default();
+        unsafe { (self.vtable().get_trace)(self.as_raw(), &raw mut trace).into_error()? };
+        Ok(trace)
     }
 }
 
