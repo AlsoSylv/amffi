@@ -1,4 +1,5 @@
 use std::{
+    ffi::CStr,
     path::{Path, PathBuf},
     ptr::null_mut,
 };
@@ -18,8 +19,8 @@ use crate::{
 
 use crate::components::component::AMFComponent;
 
-pub const AMF_INIT_FUNCTION_NAME: &str = "AMFInit";
-pub const AMF_QUERY_VERSION_FUNCTION_NAME: &str = "AMFQueryVersion";
+pub const AMF_INIT_FUNCTION_NAME: &CStr = c"AMFInit";
+pub const AMF_QUERY_VERSION_FUNCTION_NAME: &CStr = c"AMFQueryVersion";
 
 #[cfg(all(target_arch = "x86_64", target_os = "windows"))]
 pub const AMF_DLL_NAME: &str = "amfrt64.dll";
@@ -67,7 +68,6 @@ pub struct AMFFactoryVtbl {
     // TODO: Expose in wrapper function
     get_cache_folder: stdcall!(fn(this: *mut *const Self) -> *const WideChar),
     get_debug: stdcall!(fn(this: *mut *const Self, debug: *mut AMFDebug) -> AMFResult),
-    // TODO: Add trace support
     get_trace: stdcall!(fn(this: *mut *const Self, trace: *mut AMFTrace) -> AMFResult),
     // TODO: Add programs support
     get_programs: *mut (),

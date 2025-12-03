@@ -47,8 +47,8 @@ pub fn amf_init() -> Result<&'static AMFLibrary, libloading::Error> {
         Ok(lib)
     } else {
         let lib = unsafe { Library::new(AMF_DLL_NAME)? };
-        let init = unsafe { *lib.get(AMF_INIT_FUNCTION_NAME.as_bytes())? };
-        let query_version = unsafe { *lib.get(AMF_QUERY_VERSION_FUNCTION_NAME.as_bytes())? };
+        let init = unsafe { *lib.get(AMF_INIT_FUNCTION_NAME)? };
+        let query_version = unsafe { *lib.get(AMF_QUERY_VERSION_FUNCTION_NAME)? };
 
         let lib = AMFLibrary {
             lib,

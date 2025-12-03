@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(C)]
 pub enum AMFResult {
     Ok = 0,
@@ -101,9 +101,13 @@ impl AMFError {
             unsafe { Err(std::mem::transmute::<AMFResult, AMFError>(value)) }
         }
     }
+
+    pub(crate) fn into_result(self) -> AMFResult {
+        unsafe { std::mem::transmute(self) }
+    }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(C)]
 pub enum AMFError {
     Fail = AMFResult::Fail as isize,

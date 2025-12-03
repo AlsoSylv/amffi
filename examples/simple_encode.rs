@@ -132,7 +132,6 @@ fn main() {
 
         let instant = Instant::now();
         surface_in = if let Some(surface) = &surface_in {
-            #[allow(unused)] // TODO: Add timestamps
             surface
                 .set_property(
                     widecstr!("StartTimeProperty"),

@@ -73,7 +73,10 @@ impl AMFBuffer {
     pub fn add_observer<T: BufferObserver>(&self, observer: T) -> BufferObserverHandle<T> {
         let internal_observer = Box::into_raw(Box::new(InternalBufferObserver::new(observer)));
         unsafe { (self.vtable().add_observer)(self.as_raw(), internal_observer as _) };
-        BufferObserverHandle { ptr: internal_observer, buffer: self.clone() }
+        BufferObserverHandle {
+            ptr: internal_observer,
+            buffer: self.clone(),
+        }
     }
 
     pub fn remove_observer<T: BufferObserver>(&self, handle: BufferObserverHandle<T>) {
@@ -91,7 +94,7 @@ impl<T: BufferObserver> Drop for BufferObserverHandle<T> {
         unsafe { (self.buffer.vtable().remove_observer)(self.buffer.as_raw(), self.ptr as _) };
         unsafe {
             drop(Box::from_raw(self.ptr));
-        };    
+        };
     }
 }
 
