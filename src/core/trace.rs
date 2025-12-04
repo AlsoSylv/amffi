@@ -1,6 +1,6 @@
 //! TODO: Expose traces
 
-use std::{ffi::c_void, panic::Location};
+use std::{ffi::c_void, panic::Location, path::{Path, PathBuf}, ptr::null_mut};
 
 use widestring::{WideCStr, WideCString, WideChar, error::ContainsNul, widecstr};
 
@@ -43,10 +43,23 @@ impl TryFrom<i32> for AMFTraceLevel {
     }
 }
 
-// TODO: Wrap both of these in `TraceWriter` ZSTs
-pub const AMF_TRACE_WRITER_CONSOLE: &WideCStr = widecstr!("Console");
-pub const AMF_TRACE_WRITER_DEBUG_OUTPUT: &WideCStr = widecstr!("DebugOutput");
-pub const AMF_TRACE_WRITER_FILE: &WideCStr = widecstr!("File");
+pub struct AMFTraceWriterConsole;
+
+impl TraceWriter for AMFTraceWriterConsole {
+    const NAME: &WideCStr = widecstr!("Console");
+}
+
+pub struct AMFTraceWriterDebugOutput;
+
+impl TraceWriter for AMFTraceWriterDebugOutput {
+    const NAME: &WideCStr = widecstr!("DebugOutput");
+}
+
+pub struct AMFTraceWriterFile;
+
+impl TraceWriter for AMFTraceWriterFile {
+    const NAME: &WideCStr = widecstr!("File");
+}
 
 #[repr(C)]
 pub struct AMFTraceWriterVtbl {
@@ -55,12 +68,12 @@ pub struct AMFTraceWriterVtbl {
 }
 
 #[repr(C)]
-pub(crate) struct InternalTraceWriter<T: TraceWriter> {
+pub(crate) struct InternalTraceWriter<T: CustomTraceWriter> {
     vtbl: &'static AMFTraceWriterVtbl,
     this: T,
 }
 
-impl<T: TraceWriter> InternalTraceWriter<T> {
+impl<T: CustomTraceWriter> InternalTraceWriter<T> {
     pub(crate) fn new(writer: T) -> Self {
         Self {
             vtbl: &AMFTraceWriterVtbl {
@@ -74,14 +87,16 @@ impl<T: TraceWriter> InternalTraceWriter<T> {
 
 pub trait TraceWriter {
     const NAME: &WideCStr;
+}
 
+pub trait CustomTraceWriter: TraceWriter {
     fn write(&mut self, scope: &WideCStr, message: &WideCStr);
 
     fn flush(&mut self);
 }
 
 stdcall! {
-    unsafe fn internal_write<T: TraceWriter>(this: *mut *const AMFTraceWriterVtbl, scope: *mut WideChar, message: *mut WideChar) {
+    unsafe fn internal_write<T: CustomTraceWriter>(this: *mut *const AMFTraceWriterVtbl, scope: *mut WideChar, message: *mut WideChar) {
         let this = unsafe { &mut *(this as *mut InternalTraceWriter<T>) };
         let scope = unsafe { WideCStr::from_ptr_str(scope) };
         let message = unsafe { WideCStr::from_ptr_str(message) };
@@ -90,7 +105,7 @@ stdcall! {
 }
 
 stdcall! {
-    unsafe fn internal_flush<T: TraceWriter>(this: *mut *const AMFTraceWriterVtbl) {
+    unsafe fn internal_flush<T: CustomTraceWriter>(this: *mut *const AMFTraceWriterVtbl) {
         let this = unsafe { &mut *(this as *mut InternalTraceWriter<T>) };
         this.this.flush();
     }
@@ -223,16 +238,29 @@ impl AMFTrace {
         Ok(())
     }
 
-    pub fn set_writer_enabled(&self, writer_id: &WideCStr, enabled: bool) -> bool {
-        unsafe { (self.vtable().enable_writer)(self.as_raw(), writer_id.as_ptr(), enabled) }
+    pub fn set_writer_enabled<T: TraceWriter>(&self, enabled: bool) -> bool {
+        unsafe { (self.vtable().enable_writer)(self.as_raw(), T::NAME.as_ptr(), enabled) }
     }
 
-    pub fn writer_enabled(&self, writer_id: &WideCStr) -> bool {
-        unsafe { (self.vtable().writer_enabled)(self.as_raw(), writer_id.as_ptr()) }
+    pub fn writer_enabled<T: TraceWriter>(&self) -> bool {
+        unsafe { (self.vtable().writer_enabled)(self.as_raw(), T::NAME.as_ptr()) }
     }
 
     pub fn trace_flush(&self) -> Result<(), AMFError> {
         unsafe { (self.vtable().trace_flush)(self.as_raw()).into_error() }
+    }
+
+    pub fn set_path(&self, path: &Path) -> Result<(), AMFError> {
+        let wide_path = WideCString::from_os_str(path).unwrap();
+        unsafe { (self.vtable().set_path)(self.as_raw(), wide_path.as_ptr()).into_error() }
+    }
+
+    pub fn get_path(&self) -> Result<PathBuf, AMFError> {
+        let mut size = 0;
+        unsafe { (self.vtable().get_path)(self.as_raw(), null_mut(), &raw mut size).into_error() }?;
+        let mut buffer = vec![0; size as usize];
+        unsafe { (self.vtable().get_path)(self.as_raw(), buffer.as_mut_ptr(), &raw mut size).into_error() }?;
+        Ok(WideCString::from_vec(buffer).unwrap().to_os_string().into())
     }
 
     pub fn set_global_level(&self, level: AMFTraceLevel) -> AMFTraceLevel {
@@ -251,32 +279,31 @@ impl AMFTrace {
         }
     }
 
-    pub fn set_writer_level(&self, writer_id: &WideCStr, level: AMFTraceLevel) -> AMFTraceLevel {
+    pub fn set_writer_level<T: TraceWriter>(&self, level: AMFTraceLevel) -> AMFTraceLevel {
         unsafe {
-            (self.vtable().set_writer_level)(self.as_raw(), writer_id.as_ptr(), level as i32)
+            (self.vtable().set_writer_level)(self.as_raw(), T::NAME.as_ptr(), level as i32)
                 .try_into()
                 .expect("SetGlobalLevel returns a valid trace level")
         }
     }
 
-    pub fn get_writer_level(&self, writer_id: &WideCStr) -> AMFTraceLevel {
+    pub fn get_writer_level<T: TraceWriter>(&self) -> AMFTraceLevel {
         unsafe {
-            (self.vtable().get_writer_level)(self.as_raw(), writer_id.as_ptr())
+            (self.vtable().get_writer_level)(self.as_raw(), T::NAME.as_ptr())
                 .try_into()
                 .expect("GetGlobalLevel returns a valid trace level")
         }
     }
 
-    pub fn set_writer_level_per_scope(
+    pub fn set_writer_level_per_scope<T: TraceWriter>(
         &self,
-        writer_id: &WideCStr,
         scope: &WideCStr,
         level: AMFTraceLevel,
     ) -> AMFTraceLevel {
         unsafe {
             (self.vtable().set_writer_level_for_scope)(
                 self.as_raw(),
-                writer_id.as_ptr(),
+                T::NAME.as_ptr(),
                 scope.as_ptr(),
                 level as i32,
             )
@@ -285,15 +312,14 @@ impl AMFTrace {
         }
     }
 
-    pub fn get_writer_leve_per_scopel(
+    pub fn get_writer_leve_per_scopel<T: TraceWriter>(
         &self,
-        writer_id: &WideCStr,
         scope: &WideCStr,
     ) -> AMFTraceLevel {
         unsafe {
             (self.vtable().get_writer_level_for_scope)(
                 self.as_raw(),
-                writer_id.as_ptr(),
+                T::NAME.as_ptr(),
                 scope.as_ptr(),
             )
             .try_into()
@@ -309,7 +335,7 @@ impl AMFTrace {
         unsafe { (self.vtable().indent)(self.as_raw(), to_add) }
     }
 
-    pub fn register_writer<T: TraceWriter>(
+    pub fn register_writer<T: CustomTraceWriter>(
         &self,
         writer: T,
         enabled: bool,
@@ -366,13 +392,13 @@ impl AMFTrace {
     }
 }
 
-pub struct TraceWriterHandle<T: TraceWriter> {
+pub struct TraceWriterHandle<T: CustomTraceWriter> {
     ptr: *mut InternalTraceWriter<T>,
     name: WideCString,
     trace: AMFTrace,
 }
 
-impl<T: TraceWriter> Drop for TraceWriterHandle<T> {
+impl<T: CustomTraceWriter> Drop for TraceWriterHandle<T> {
     fn drop(&mut self) {
         unsafe { (self.trace.vtable().unregister_writer)(self.trace.as_raw(), self.name.as_ptr()) }
         unsafe { drop(Box::from_raw(self.ptr)) }

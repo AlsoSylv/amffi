@@ -18,7 +18,7 @@ use amffi::{
         platform::{AMFRate, AMFSize},
         result::AMFError,
         surface::AMFSurface,
-        trace::{AMF_TRACE_WRITER_CONSOLE, AMF_TRACE_WRITER_DEBUG_OUTPUT},
+        trace::{AMFTraceWriterConsole, AMFTraceWriterDebugOutput},
     },
 };
 use widestring::widecstr;
@@ -36,8 +36,8 @@ fn main() {
     let version = library.query_version().unwrap();
     let factory = library.init_factory(version).unwrap();
     let trace = factory.get_trace().unwrap();
-    trace.set_writer_enabled(AMF_TRACE_WRITER_CONSOLE, true);
-    trace.set_writer_enabled(AMF_TRACE_WRITER_DEBUG_OUTPUT, true);
+    trace.set_writer_enabled::<AMFTraceWriterConsole>(true);
+    trace.set_writer_enabled::<AMFTraceWriterDebugOutput>(true);
 
     let context = factory.create_context().unwrap();
     unsafe {
