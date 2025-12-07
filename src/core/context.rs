@@ -1,9 +1,7 @@
-use std::{
-    ffi::{c_char, c_void}
-};
+use std::ffi::{c_char, c_void};
 
 #[cfg(windows)]
-use windows::Win32::Graphics::Direct3D11::ID3D11Texture2D;
+use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11Texture2D};
 
 use crate::{
     core::{
@@ -191,7 +189,27 @@ impl AMFContext {
         unsafe { (self.vtable().terminate)(self.as_raw()) }.into_error()
     }
 
-    pub fn init_dx11(&self, device: *mut c_void, dx_version: AMFDXVersion) -> Result<(), AMFError> {
+    #[cfg(windows)]
+    pub fn init_dx11(
+        &self,
+        device: ID3D11Device,
+        dx_version: AMFDXVersion,
+    ) -> Result<(), AMFError> {
+        use windows::core::Interface;
+
+        unsafe {
+            (self.vtable().init_dx11)(self.as_raw(), device.as_raw(), dx_version).into_error()
+        }
+    }
+
+    /// # Safety
+    /// `device` is not null
+    /// `device` is ID3D11Device
+    pub unsafe fn init_dx11_raw(
+        &self,
+        device: *mut c_void,
+        dx_version: AMFDXVersion,
+    ) -> Result<(), AMFError> {
         unsafe { (self.vtable().init_dx11)(self.as_raw(), device, dx_version).into_error() }
     }
 
@@ -351,7 +369,10 @@ pub struct AMFContext1Vtbl {
 }
 
 impl AMFContext1 {
-    pub fn init_vulkan(&self, device: *mut c_void) -> Result<(), AMFError> {
+    /// # Safety
+    /// `device` is not null
+    /// `device` is a pointer to AMFVulkanDevice
+    pub unsafe fn init_vulkan(&self, device: *mut c_void) -> Result<(), AMFError> {
         unsafe { (self.vtable().init_vulkan)(self.as_raw(), device) }.into_error()
     }
 

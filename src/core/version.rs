@@ -16,7 +16,12 @@ pub const fn get_build_version() -> u16 {
 
 /// Returns in order [MAJOR, MINOR, RELEASE, BUILD]
 pub const fn get_version_numbers() -> [u16; 4] {
-    [AMF_VERSION_MAJOR, AMF_VERSION_MINOR, AMF_VERSION_RELEASE, AMF_VERSION_BUILD_NUM]
+    [
+        AMF_VERSION_MAJOR,
+        AMF_VERSION_MINOR,
+        AMF_VERSION_RELEASE,
+        AMF_VERSION_BUILD_NUM,
+    ]
 }
 
 /// 1.4.36.0

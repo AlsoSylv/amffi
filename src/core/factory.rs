@@ -1,4 +1,8 @@
-use std::ptr::null_mut;
+use std::{
+    ffi::CStr,
+    path::{Path, PathBuf},
+    ptr::null_mut,
+};
 
 use widestring::{WideCStr, WideChar};
 
@@ -8,14 +12,15 @@ use crate::{
         debug::AMFDebug,
         interface::Interface,
         result::{AMFError, AMFResult},
+        trace::AMFTrace,
     },
     stdcall,
 };
 
 use crate::components::component::AMFComponent;
 
-pub const AMF_INIT_FUNCTION_NAME: &str = "AMFInit";
-pub const AMF_QUERY_VERSION_FUNCTION_NAME: &str = "AMFQueryVersion";
+pub const AMF_INIT_FUNCTION_NAME: &CStr = c"AMFInit";
+pub const AMF_QUERY_VERSION_FUNCTION_NAME: &CStr = c"AMFQueryVersion";
 
 #[cfg(all(target_arch = "x86_64", target_os = "windows"))]
 pub const AMF_DLL_NAME: &str = "amfrt64.dll";
@@ -59,19 +64,11 @@ pub struct AMFFactoryVtbl {
         ) -> AMFResult
     ),
     // TODO: Expose in wrapper function
-    set_cache_folder: stdcall!(
-        fn(
-            this: *mut *const Self,
-            context: *mut *const AMFContextVtbl,
-            name: *const WideChar,
-        ) -> AMFResult
-    ),
+    set_cache_folder: stdcall!(fn(this: *mut *const Self, path: *const WideChar) -> AMFResult),
     // TODO: Expose in wrapper function
     get_cache_folder: stdcall!(fn(this: *mut *const Self) -> *const WideChar),
-    // TODO: Expose in wrapper function
     get_debug: stdcall!(fn(this: *mut *const Self, debug: *mut AMFDebug) -> AMFResult),
-    // TODO: Add trace support
-    get_trace: *mut (),
+    get_trace: stdcall!(fn(this: *mut *const Self, trace: *mut AMFTrace) -> AMFResult),
     // TODO: Add programs support
     get_programs: *mut (),
 }
@@ -84,9 +81,13 @@ impl AMFFactory {
         unsafe { &**self.0 }
     }
 
+    unsafe fn as_raw(&self) -> *mut *const AMFFactoryVtbl {
+        self.0
+    }
+
     pub fn create_context(&self) -> Result<AMFContext, AMFError> {
         let mut context = AMFContext::default();
-        unsafe { (self.vtable().create_context)(self.0, &raw mut context) }.into_error()?;
+        unsafe { (self.vtable().create_context)(self.as_raw(), &raw mut context) }.into_error()?;
         Ok(context)
     }
 
@@ -98,7 +99,7 @@ impl AMFFactory {
         let mut component = AMFComponent::default();
         unsafe {
             (self.vtable().create_component)(
-                self.0,
+                self.as_raw(),
                 context.as_raw(),
                 name.as_ptr(),
                 &raw mut component,
@@ -106,6 +107,29 @@ impl AMFFactory {
         }
         .into_error()?;
         Ok(component)
+    }
+
+    pub fn get_cache_folder(&self) -> PathBuf {
+        let cstr = unsafe { (self.vtable().get_cache_folder)(self.as_raw()) };
+        let cstr = unsafe { widestring::WideCStr::from_ptr_str(cstr) };
+        cstr.to_string().unwrap().into()
+    }
+
+    pub fn set_cache_folder(&self, path: &Path) -> Result<(), AMFError> {
+        let path = widestring::WideCString::from_os_str(path.as_os_str()).unwrap();
+        unsafe { (self.vtable().set_cache_folder)(self.as_raw(), path.as_ptr()) }.into_error()
+    }
+
+    pub fn get_debug(&self) -> Result<AMFDebug, AMFError> {
+        let mut debug = AMFDebug::default();
+        unsafe { (self.vtable().get_debug)(self.as_raw(), &raw mut debug).into_error()? };
+        Ok(debug)
+    }
+
+    pub fn get_trace(&self) -> Result<AMFTrace, AMFError> {
+        let mut trace = AMFTrace::default();
+        unsafe { (self.vtable().get_trace)(self.as_raw(), &raw mut trace).into_error()? };
+        Ok(trace)
     }
 }
 

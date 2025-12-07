@@ -12,7 +12,7 @@ pub struct AMFInterface(*mut *const <Self as Interface>::Vtbl);
 
 impl Default for AMFInterface {
     fn default() -> Self {
-        Self(std::ptr::null_mut())    
+        Self(std::ptr::null_mut())
     }
 }
 

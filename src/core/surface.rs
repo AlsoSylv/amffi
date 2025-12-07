@@ -89,7 +89,8 @@ pub type AMFSurfaceObserver = *mut *const AMFSurfaceObserverVtbl;
 
 #[repr(C)]
 pub struct AMFSurfaceObserverVtbl {
-    on_surface_data_release: stdcall!(fn(this: *mut *const Self, surface: ManuallyDrop<AMFSurface>)),
+    on_surface_data_release:
+        stdcall!(fn(this: *mut *const Self, surface: ManuallyDrop<AMFSurface>)),
 }
 
 #[repr(C)]
@@ -112,7 +113,6 @@ impl<T: SurfaceObserver> InternalSurfaceObserver<T> {
 pub trait SurfaceObserver {
     fn on_surface_data_release(&mut self, surface: ManuallyDrop<AMFSurface>);
 }
-
 
 stdcall! {
     fn internal_observer<T: SurfaceObserver>(this: *mut *const AMFSurfaceObserverVtbl, surface: ManuallyDrop<AMFSurface>) {
@@ -207,6 +207,7 @@ impl AMFSurface {
         unsafe { (self.vtable().set_crop)(self.as_raw(), x, y, width, height) }.into_error()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn copy_surface_region(
         &self,
         dst: &mut AMFSurface,
@@ -235,7 +236,10 @@ impl AMFSurface {
     pub fn add_observer<T: SurfaceObserver>(&self, observer: T) -> SurfaceObserverHandle<T> {
         let internal_observer = Box::into_raw(Box::new(InternalSurfaceObserver::new(observer)));
         unsafe { (self.vtable().add_observer)(self.as_raw(), internal_observer as _) };
-        SurfaceObserverHandle { ptr: internal_observer, surface: self.clone() }
+        SurfaceObserverHandle {
+            ptr: internal_observer,
+            surface: self.clone(),
+        }
     }
 
     pub fn remove_observer<T: SurfaceObserver>(&self, handle: SurfaceObserverHandle<T>) {

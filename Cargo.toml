@@ -2,19 +2,20 @@
 name = "amffi"
 version = "0.0.1"
 edition = "2024"
-rust-version = "1.85.1"
+rust-version = "1.88.0"
 license = "MIT"
 description = "Rust bindings to Advanced Media Framework"
 keywords = ["amd", "graphics", "audio", "video", "ffi"]
 categories = ["multimedia", "external-ffi-bindings"]
+repository = "https://github.com/AlsoSylv/amffi"
 
 [lib]
 
 [features]
 
 [dependencies]
-libloading = "0.8.9"
-widestring = "1.2.0"
+libloading = { version = "0.9.0", default-features = false }
+widestring = "1.2.1"
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.62"
