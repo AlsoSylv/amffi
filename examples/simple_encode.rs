@@ -1,7 +1,6 @@
 use std::{
     fs::File,
     io::Write,
-    ptr::null_mut,
     time::{Duration, Instant},
 };
 
@@ -13,7 +12,7 @@ use amffi::{
     },
     core::{
         buffer::AMFBuffer,
-        context::AMFContext,
+        context::{AMFContext, AMFContext1},
         interface::Interface,
         platform::{AMFRate, AMFSize},
         result::AMFError,
@@ -22,10 +21,17 @@ use amffi::{
     },
 };
 use widestring::widecstr;
+
+#[cfg(windows)]
 use windows::{
     Win32::Graphics::Direct3D11::{D3D11_BOX, ID3D11Device, ID3D11Texture2D},
     core::Interface as _,
 };
+
+#[cfg(windows)]
+const MEMORY_TYPE: amffi::core::data::AMFMemoryType = amffi::core::data::AMFMemoryType::DX11;
+#[cfg(target_os = "linux")]
+const MEMORY_TYPE: amffi::core::data::AMFMemoryType = amffi::core::data::AMFMemoryType::Vulkan;
 
 const WIDTH: i32 = 1920;
 const HEIGHT: i32 = 1080;
@@ -40,13 +46,21 @@ fn main() {
     trace.set_writer_enabled::<AMFTraceWriterDebugOutput>(true);
 
     let context = factory.create_context().unwrap();
-    unsafe {
-        context
-            .init_dx11_raw(null_mut(), amffi::core::data::AMFDXVersion::DX11_0)
-            .unwrap()
-    };
+    let context = context.cast::<AMFContext1>().unwrap();
+    #[cfg(windows)]
+    if MEMORY_TYPE == amffi::core::data::AMFMemoryType::DX11 {
+        unsafe {
+            context
+                .init_dx11_raw(std::ptr::null_mut(), amffi::core::data::AMFDXVersion::DX11_0)
+                .unwrap()
+        };
+    }
+    if MEMORY_TYPE == amffi::core::data::AMFMemoryType::Vulkan
+    {
+        context.init_vulkan(None).unwrap();
+    }
     #[allow(unused)]
-    let (surface_1, surface_2) = prepare_dx11_surface(&context).unwrap();
+    let (surface_1, surface_2) = prepare_fill_from_host(&context).unwrap();
 
     let encoder = factory
         .create_component(&context, AMF_VIDEO_ENCODER_VCE_AVC)
@@ -105,14 +119,14 @@ fn main() {
     let mut surface_in = None;
 
     let mut x_pos = 0;
-    let mut y_pox = 0;
+    let mut y_pos = 0;
 
     while submitted < 600 {
         if surface_in.is_none() {
             surface_in = Some(
                 context
                     .alloc_surface(
-                        amffi::core::data::AMFMemoryType::DX11,
+                        MEMORY_TYPE,
                         amffi::core::surface::AMFSurfaceFormat::Nv12,
                         WIDTH,
                         HEIGHT,
@@ -120,14 +134,28 @@ fn main() {
                     .unwrap(),
             );
 
-            fill_surface_dx11(
-                &context,
-                &surface_in.clone().unwrap(),
-                &surface_1,
-                &surface_2,
-                &mut x_pos,
-                &mut y_pox,
-            );
+            #[cfg(windows)]
+            if MEMORY_TYPE == amffi::core::data::AMFMemoryType::DX11 {
+                fill_surface_dx11(
+                    &context,
+                    &surface_in.clone().unwrap(),
+                    &surface_1,
+                    &surface_2,
+                    &mut x_pos,
+                    &mut y_pos,
+                );
+            }
+
+            if MEMORY_TYPE == amffi::core::data::AMFMemoryType::Vulkan {
+                fill_surface_vulkan(
+                    &context,
+                    &surface_in.clone().unwrap(),
+                    &surface_1,
+                    &surface_2,
+                    &mut x_pos,
+                    &mut y_pos,
+                );
+            }
         }
 
         let instant = Instant::now();
@@ -167,13 +195,64 @@ fn main() {
     encoder.terminate().unwrap();
 }
 
+fn fill_surface_vulkan(
+    context: &AMFContext1,
+    surface: &AMFSurface,
+    color_1: &AMFSurface,
+    color_2: &AMFSurface,
+    x_pos: &mut u32,
+    y_pos: &mut u32,
+) {
+    let surface_plane = surface.get_plane_at(0);
+    let compute = context.get_compute(MEMORY_TYPE).unwrap();
+    let width = surface_plane.get_width();
+    let height = surface_plane.get_height();
+
+    if *x_pos + RECT_SIZE > width as u32 {
+        *x_pos = 0;
+    }
+    if *y_pos + RECT_SIZE > height as u32 {
+        *y_pos = 0;
+    }
+
+    for p in 0..surface.get_plane_count() {
+        let surface_plane = surface.get_plane_at(p);
+
+        let plane = color_1.get_plane_at(p);
+        compute
+            .copy_plane(
+                (*plane).clone(),
+                [0, 0, 0],
+                [plane.get_width() as isize, plane.get_height() as isize, 1],
+                (*surface_plane).clone(),
+                [0, 0, 0],
+            )
+            .unwrap();
+
+        let plane = color_2.get_plane_at(p);
+        compute
+            .copy_plane(
+                (*plane).clone(),
+                [0, 0, 0],
+                [plane.get_width() as isize, plane.get_height() as isize, 1],
+                (*surface_plane).clone(),
+                [*x_pos as isize / (p + 1), *y_pos as isize / (p + 1), 0],
+            )
+            .unwrap();
+    }
+
+    *x_pos += 2;
+    *y_pos += 2;
+}
+
+#[cfg(windows)]
 fn fill_surface_dx11(
     context: &AMFContext,
     surface: &AMFSurface,
     color_1: &AMFSurface,
     color_2: &AMFSurface,
     x_pos: &mut u32,
-    y_pox: &mut u32,
+    y_pos: &mut u32,
 ) {
     // The device returned does not inc the reference count
     let ptr = context.get_dx11_device(amffi::core::data::AMFDXVersion::DX11_0);
@@ -191,8 +270,8 @@ fn fill_surface_dx11(
         *x_pos = 0;
     }
 
-    if *y_pox + RECT_SIZE > HEIGHT as u32 {
-        *y_pox = 0;
+    if *y_pos + RECT_SIZE > HEIGHT as u32 {
+        *y_pos = 0;
     }
 
     let rect = D3D11_BOX {
@@ -213,7 +292,7 @@ fn fill_surface_dx11(
             surface_dx11,
             0,
             *x_pos,
-            *y_pox,
+            *y_pos,
             0,
             surface_dx11_color_2,
             0,
@@ -224,10 +303,10 @@ fn fill_surface_dx11(
         context.Flush();
     }
     *x_pos += 2;
-    *y_pox += 2;
+    *y_pos += 2;
 }
 
-fn prepare_dx11_surface(context: &AMFContext) -> Result<(AMFSurface, AMFSurface), AMFError> {
+fn prepare_fill_from_host(context: &AMFContext) -> Result<(AMFSurface, AMFSurface), AMFError> {
     let surface_1 = context.alloc_surface(
         amffi::core::data::AMFMemoryType::Host,
         amffi::core::surface::AMFSurfaceFormat::Nv12,
@@ -248,8 +327,8 @@ fn prepare_dx11_surface(context: &AMFContext) -> Result<(AMFSurface, AMFSurface)
         fill_nv12_surface_with_color(&surface_2, 128, 0, 128);
     }
 
-    surface_1.convert(amffi::core::data::AMFMemoryType::DX11)?;
-    surface_2.convert(amffi::core::data::AMFMemoryType::DX11)?;
+    surface_1.convert(MEMORY_TYPE)?;
+    surface_2.convert(MEMORY_TYPE)?;
 
     Ok((surface_1, surface_2))
 }

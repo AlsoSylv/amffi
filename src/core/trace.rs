@@ -1,6 +1,11 @@
 //! TODO: Expose traces
 
-use std::{ffi::c_void, panic::Location, path::{Path, PathBuf}, ptr::null_mut};
+use std::{
+    ffi::c_void,
+    panic::Location,
+    path::{Path, PathBuf},
+    ptr::null_mut,
+};
 
 use widestring::{WideCStr, WideCString, WideChar, error::ContainsNul, widecstr};
 
@@ -259,7 +264,9 @@ impl AMFTrace {
         let mut size = 0;
         unsafe { (self.vtable().get_path)(self.as_raw(), null_mut(), &raw mut size).into_error() }?;
         let mut buffer = vec![0; size as usize];
-        unsafe { (self.vtable().get_path)(self.as_raw(), buffer.as_mut_ptr(), &raw mut size).into_error() }?;
+        unsafe {
+            (self.vtable().get_path)(self.as_raw(), buffer.as_mut_ptr(), &raw mut size).into_error()
+        }?;
         Ok(WideCString::from_vec(buffer).unwrap().to_os_string().into())
     }
 
@@ -312,10 +319,7 @@ impl AMFTrace {
         }
     }
 
-    pub fn get_writer_leve_per_scopel<T: TraceWriter>(
-        &self,
-        scope: &WideCStr,
-    ) -> AMFTraceLevel {
+    pub fn get_writer_leve_per_scopel<T: TraceWriter>(&self, scope: &WideCStr) -> AMFTraceLevel {
         unsafe {
             (self.vtable().get_writer_level_for_scope)(
                 self.as_raw(),

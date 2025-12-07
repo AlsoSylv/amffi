@@ -12,8 +12,11 @@ repository = "https://github.com/AlsoSylv/amffi"
 [lib]
 
 [features]
+default = ["ash"]
+ash = ["dep:ash"]
 
 [dependencies]
+ash = { version = "0.38.0", default-features = false, optional = true }
 libloading = { version = "0.9.0", default-features = false }
 widestring = "1.2.1"
 

@@ -156,6 +156,7 @@ pub struct AMFSurfaceVtbl {
     base: AMFDataVtbl,
     get_format: stdcall!(fn(this: *mut *const Self) -> AMFSurfaceFormat),
     get_plane_count: stdcall!(fn(this: *mut *const Self) -> isize),
+    // The planes returned here do NOT increment the reference count
     get_plane_at: stdcall!(fn(this: *mut *const Self, idx: isize) -> ManuallyDrop<AMFPlane>),
     get_plane: stdcall!(fn(this: *mut *const Self, ty: AMFPlaneType) -> ManuallyDrop<AMFPlane>),
     get_frame_type: stdcall!(fn(this: *mut *const Self) -> AMFFrameType),
