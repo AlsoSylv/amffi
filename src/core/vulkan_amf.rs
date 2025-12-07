@@ -94,8 +94,8 @@ pub struct AMFVulkanBuffer {
 pub struct AMFVulkanSurface {
     pub size_of: isize,
     pub next: *mut (),
-    pub buffer: *mut (),
-    pub memory: *mut (),
+    pub buffer: u64,
+    pub memory: u64,
     pub size: i64,
     pub format: u32,
     pub width: i32,
@@ -104,6 +104,75 @@ pub struct AMFVulkanSurface {
     pub usage: u32,
     pub access: u32,
     pub sync: AMFVulkanSync,
+}
+
+pub struct AMFVulkanSurfaceBuilder {
+    inner: AMFVulkanSurface,
+}
+
+impl AMFVulkanSurfaceBuilder {
+    #[cfg(feature = "ash")]
+    pub fn ash_buffer(mut self, buffer: ash::vk::Buffer) -> Self {
+        use ash::vk::Handle;
+
+        self.inner.buffer = buffer.as_raw();
+        self
+    }
+
+    #[cfg(feature = "ash")]
+    pub fn ash_memory(mut self, memory: ash::vk::DeviceMemory) -> Self {
+        use ash::vk::Handle;
+
+        self.inner.memory = memory.as_raw();
+        self
+    }
+
+    pub fn size(mut self, size: i64) -> Self {
+        self.inner.size = size;
+        self
+    }
+
+    #[cfg(feature = "ash")]
+    pub fn ash_format(mut self, format: ash::vk::Format) -> Self {
+        self.inner.format = format.as_raw() as u32;
+        self
+    }
+
+    pub fn width(mut self, width: i32) -> Self {
+        self.inner.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: i32) -> Self {
+        self.inner.height = height;
+        self
+    }
+
+    #[cfg(feature = "ash")]
+    pub fn ash_current_layout(mut self, current_layout: ash::vk::ImageLayout) -> Self {
+        self.inner.current_layout = current_layout.as_raw() as u32;
+        self
+    }
+
+    pub fn usage(mut self, usage: u32) -> Self {
+        self.inner.usage = usage;
+        self
+    }
+
+    pub fn cpu_memory_access(mut self, access: u32) -> Self {
+        self.inner.access = access;
+        self
+    }
+
+    pub fn sync(mut self, amf_sync: AMFVulkanSync) -> Self {
+        self.inner.sync = amf_sync;
+        self
+    }
+
+    pub fn build(mut self) -> AMFVulkanSurface {
+        self.inner.size_of = size_of::<AMFVulkanSurface>() as isize;
+        self.inner
+    }
 }
 
 #[repr(C)]

@@ -15,7 +15,7 @@ use crate::{
         property_storage::AMFPropertyStorageVtbl,
         result::{AMFError, AMFResult},
         surface::{AMFSurface, AMFSurfaceFormat, AMFSurfaceObserver},
-        vulkan_amf::AMFVulkanDevice,
+        vulkan_amf::{AMFVulkanDevice, AMFVulkanSurface},
     },
     stdcall,
 };
@@ -387,6 +387,23 @@ impl AMFContext1 {
         unsafe {
             (*((self.vtable().get_vulkan_device)(self.as_raw()) as *mut AMFVulkanDevice)).clone()
         }
+    }
+
+    pub fn create_surface_from_vulkan_native(
+        &self,
+        vulkan_surface: &mut AMFVulkanSurface,
+    ) -> Result<AMFSurface, AMFError> {
+        let mut surface = AMFSurface::default();
+        unsafe {
+            (self.vtable().create_surface_from_vulkan_native)(
+                self.as_raw(),
+                vulkan_surface as *mut _ as _,
+                &raw mut surface,
+                std::ptr::null_mut(),
+            )
+        }
+        .into_error()?;
+        Ok(surface)
     }
 }
 

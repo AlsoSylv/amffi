@@ -51,12 +51,14 @@ fn main() {
     if MEMORY_TYPE == amffi::core::data::AMFMemoryType::DX11 {
         unsafe {
             context
-                .init_dx11_raw(std::ptr::null_mut(), amffi::core::data::AMFDXVersion::DX11_0)
+                .init_dx11_raw(
+                    std::ptr::null_mut(),
+                    amffi::core::data::AMFDXVersion::DX11_0,
+                )
                 .unwrap()
         };
     }
-    if MEMORY_TYPE == amffi::core::data::AMFMemoryType::Vulkan
-    {
+    if MEMORY_TYPE == amffi::core::data::AMFMemoryType::Vulkan {
         context.init_vulkan(None).unwrap();
     }
     #[allow(unused)]
