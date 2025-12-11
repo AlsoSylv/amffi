@@ -1,5 +1,5 @@
 use std::{
-    ffi::{c_char, c_void},
+    ffi::{CStr, CString, c_char, c_void},
     ptr::null_mut,
 };
 
@@ -15,7 +15,7 @@ use crate::{
         property_storage::AMFPropertyStorageVtbl,
         result::{AMFError, AMFResult},
         surface::{AMFSurface, AMFSurfaceFormat, AMFSurfaceObserver},
-        vulkan_amf::{AMFVulkanDevice, AMFVulkanSurface},
+        vulkan_amf::{AMFVulkanBuffer, AMFVulkanDevice, AMFVulkanSurface},
     },
     stdcall,
 };
@@ -377,7 +377,7 @@ pub struct AMFContext1Vtbl {
     ),
 }
 
-impl AMFContext1 {
+impl AMFContext1 {    
     pub fn init_vulkan(&self, device: Option<&mut AMFVulkanDevice>) -> Result<(), AMFError> {
         let device = device.map(|d| d as *mut _).unwrap_or(null_mut());
         unsafe { (self.vtable().init_vulkan)(self.as_raw(), device) }.into_error()
@@ -387,6 +387,14 @@ impl AMFContext1 {
         unsafe {
             (*((self.vtable().get_vulkan_device)(self.as_raw()) as *mut AMFVulkanDevice)).clone()
         }
+    }
+
+    pub fn lock_vulkan(&self) -> Result<(), AMFError> {
+        unsafe { (self.vtable().lock_vulkan)(self.as_raw()) }.into_error()
+    }
+
+    pub fn unlock_vulkan(&self) -> Result<(), AMFError> {
+        unsafe { (self.vtable().unlock_vulkan)(self.as_raw()) }.into_error()
     }
 
     pub fn create_surface_from_vulkan_native(
@@ -404,6 +412,48 @@ impl AMFContext1 {
         }
         .into_error()?;
         Ok(surface)
+    }
+
+    pub fn create_buffer_from_vulkan_native(
+        &self,
+        vulkan_buffer: &mut AMFVulkanBuffer,
+    ) -> Result<AMFBuffer, AMFError> {
+        let mut surface = AMFBuffer::default();
+        unsafe {
+            (self.vtable().create_buffer_from_vulkan_native)(
+                self.as_raw(),
+                vulkan_buffer as *mut _ as _,
+                &raw mut surface,
+                std::ptr::null_mut(),
+            )
+        }
+        .into_error()?;
+        Ok(surface)
+    }
+
+    pub fn get_vulkan_device_extensions(&self) -> Result<Box<[CString]>, AMFError> {
+        let mut count = 0;
+        unsafe {
+            (self.vtable().get_vulkan_device_extensions)(
+                self.as_raw(),
+                &raw mut count,
+                std::ptr::null_mut(),
+            )
+        }
+        .into_error()?;
+        let mut vec = vec![std::ptr::null(); count as usize];
+        unsafe {
+            (self.vtable().get_vulkan_device_extensions)(
+                self.as_raw(),
+                &raw mut count,
+                vec.as_mut_ptr(),
+            )
+        }
+        .into_error()?;
+        let vec = vec
+            .into_iter()
+            .map(|ptr| unsafe { CStr::from_ptr(ptr).to_owned() });
+        Ok(vec.collect())
     }
 }
 
