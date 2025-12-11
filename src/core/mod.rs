@@ -3,6 +3,7 @@ pub mod compute;
 pub mod context;
 pub mod data;
 pub mod debug;
+pub mod dump;
 pub mod factory;
 pub mod interface;
 pub mod plane;
