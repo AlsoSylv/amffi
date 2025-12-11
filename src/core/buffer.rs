@@ -45,7 +45,7 @@ stdcall! {
 }
 
 #[repr(C)]
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct AMFBuffer(AMFInterface);
 
 #[repr(C)]

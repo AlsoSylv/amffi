@@ -1,4 +1,7 @@
-use std::ffi::{c_char, c_void};
+use std::{
+    ffi::{CStr, CString, c_char, c_void},
+    ptr::null_mut,
+};
 
 #[cfg(windows)]
 use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11Texture2D};
@@ -6,11 +9,13 @@ use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11Texture2D};
 use crate::{
     core::{
         buffer::{AMFBuffer, AMFBufferObserver},
+        compute::AMFCompute,
         data::{AMFDXVersion, AMFMemoryType},
         interface::{AMFInterface, Guid, Interface},
         property_storage::AMFPropertyStorageVtbl,
         result::{AMFError, AMFResult},
         surface::{AMFSurface, AMFSurfaceFormat, AMFSurfaceObserver},
+        vulkan_amf::{AMFVulkanBuffer, AMFVulkanDevice, AMFVulkanSurface},
     },
     stdcall,
 };
@@ -176,11 +181,7 @@ pub struct AMFContextVtbl {
         ) -> AMFResult
     ),
     get_compute: stdcall!(
-        fn(
-            this: *mut *const AMFContextVtbl,
-            mem_type: AMFMemoryType,
-            compute: *mut *mut c_void,
-        ) -> AMFResult
+        fn(this: *mut *const Self, mem_type: AMFMemoryType, compute: *mut AMFCompute) -> AMFResult
     ),
 }
 
@@ -265,6 +266,13 @@ impl AMFContext {
         .into_error()?;
         Ok(surface)
     }
+
+    pub fn get_compute(&self, memory_type: AMFMemoryType) -> Result<AMFCompute, AMFError> {
+        let mut compute = AMFCompute::default();
+        unsafe { (self.vtable().get_compute)(self.as_raw(), memory_type, &raw mut compute) }
+            .into_error()?;
+        Ok(compute)
+    }
 }
 
 impl Interface for AMFContext {
@@ -343,8 +351,9 @@ pub struct AMFContext1Vtbl {
             surface: *mut AMFSurface,
         ) -> AMFResult
     ),
-    init_vulkan: stdcall!(fn(this: *mut *const Self, vulkan_device: *mut c_void) -> AMFResult),
-    get_vulkan_device: stdcall!(fn(this: *mut *const Self) -> *mut c_void),
+    init_vulkan:
+        stdcall!(fn(this: *mut *const Self, vulkan_device: *mut AMFVulkanDevice) -> AMFResult),
+    get_vulkan_device: stdcall!(fn(this: *mut *const Self) -> *mut AMFVulkanDevice),
     lock_vulkan: stdcall!(fn(this: *mut *const Self) -> AMFResult),
     unlock_vulkan: stdcall!(fn(this: *mut *const Self) -> AMFResult),
     create_surface_from_vulkan_native: stdcall!(
@@ -368,16 +377,83 @@ pub struct AMFContext1Vtbl {
     ),
 }
 
-impl AMFContext1 {
-    /// # Safety
-    /// `device` is not null
-    /// `device` is a pointer to AMFVulkanDevice
-    pub unsafe fn init_vulkan(&self, device: *mut c_void) -> Result<(), AMFError> {
+impl AMFContext1 {    
+    pub fn init_vulkan(&self, device: Option<&mut AMFVulkanDevice>) -> Result<(), AMFError> {
+        let device = device.map(|d| d as *mut _).unwrap_or(null_mut());
         unsafe { (self.vtable().init_vulkan)(self.as_raw(), device) }.into_error()
     }
 
-    pub fn get_vulkan_device(&self) -> *mut c_void {
-        unsafe { (self.vtable().get_vulkan_device)(self.as_raw()) }
+    pub fn get_vulkan_device(&self) -> AMFVulkanDevice {
+        unsafe {
+            (*((self.vtable().get_vulkan_device)(self.as_raw()) as *mut AMFVulkanDevice)).clone()
+        }
+    }
+
+    pub fn lock_vulkan(&self) -> Result<(), AMFError> {
+        unsafe { (self.vtable().lock_vulkan)(self.as_raw()) }.into_error()
+    }
+
+    pub fn unlock_vulkan(&self) -> Result<(), AMFError> {
+        unsafe { (self.vtable().unlock_vulkan)(self.as_raw()) }.into_error()
+    }
+
+    pub fn create_surface_from_vulkan_native(
+        &self,
+        vulkan_surface: &mut AMFVulkanSurface,
+    ) -> Result<AMFSurface, AMFError> {
+        let mut surface = AMFSurface::default();
+        unsafe {
+            (self.vtable().create_surface_from_vulkan_native)(
+                self.as_raw(),
+                vulkan_surface as *mut _ as _,
+                &raw mut surface,
+                std::ptr::null_mut(),
+            )
+        }
+        .into_error()?;
+        Ok(surface)
+    }
+
+    pub fn create_buffer_from_vulkan_native(
+        &self,
+        vulkan_buffer: &mut AMFVulkanBuffer,
+    ) -> Result<AMFBuffer, AMFError> {
+        let mut surface = AMFBuffer::default();
+        unsafe {
+            (self.vtable().create_buffer_from_vulkan_native)(
+                self.as_raw(),
+                vulkan_buffer as *mut _ as _,
+                &raw mut surface,
+                std::ptr::null_mut(),
+            )
+        }
+        .into_error()?;
+        Ok(surface)
+    }
+
+    pub fn get_vulkan_device_extensions(&self) -> Result<Box<[CString]>, AMFError> {
+        let mut count = 0;
+        unsafe {
+            (self.vtable().get_vulkan_device_extensions)(
+                self.as_raw(),
+                &raw mut count,
+                std::ptr::null_mut(),
+            )
+        }
+        .into_error()?;
+        let mut vec = vec![std::ptr::null(); count as usize];
+        unsafe {
+            (self.vtable().get_vulkan_device_extensions)(
+                self.as_raw(),
+                &raw mut count,
+                vec.as_mut_ptr(),
+            )
+        }
+        .into_error()?;
+        let vec = vec
+            .into_iter()
+            .map(|ptr| unsafe { CStr::from_ptr(ptr).to_owned() });
+        Ok(vec.collect())
     }
 }
 

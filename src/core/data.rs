@@ -16,6 +16,7 @@ pub enum AMFDataType {
 }
 
 #[repr(C)]
+#[derive(PartialEq)]
 pub enum AMFMemoryType {
     Unknown = 0,
     Host = 1,

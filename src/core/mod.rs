@@ -1,4 +1,5 @@
 pub mod buffer;
+pub mod compute;
 pub mod context;
 pub mod data;
 pub mod debug;

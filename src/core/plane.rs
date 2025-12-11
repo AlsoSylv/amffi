@@ -16,6 +16,7 @@ pub enum AMFPlaneType {
 }
 
 #[repr(transparent)]
+#[derive(Clone)]
 pub struct AMFPlane(<Self as std::ops::Deref>::Target);
 
 #[repr(C)]
