@@ -1,12 +1,12 @@
-### If you like my work and want to support what I do, support me on Ko-Fi :purple_heart:!
+### If you like my work and want to support what I do, support me on Ko-Fi 💜!
 [![Ko-Fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/cyberite)
 ---
 
 ![Crates.io MSRV](https://img.shields.io/crates/msrv/amffi?style=for-the-badge) ![Crates.io License](https://img.shields.io/crates/l/amffi?style=for-the-badge) ![GitHub Repo stars](https://img.shields.io/github/stars/AlsoSylv/amffi?style=for-the-badge)
 
-amf-bindings are a set of bindings to the [Advanced Media Framework](https://github.com/GPUOpen-LibrariesAndSDKs/AMF) C++ API.
+amffi is a wrapper of [Advanced Media Framework's](https://github.com/GPUOpen-LibrariesAndSDKs/AMF) C++ API.
 
-This wraps AMF in an cross platform COM style API, in a similar way to AMDs own examples.
+This works as a cross platform COM style API, in a similar way to AMDs own examples.
 
 32-bit environments are currently supported through the usage of macros to change the calling convention between x86_64 and x86, and any breakage is considered a bug
 
@@ -92,5 +92,4 @@ public:
 ```
 
 Not all features are currently implemented, but are planned.
-AMF Dump, Trace, and Debug are the next planned features.
-Things such as Compute, D3D12, HEVC and AV1 are all going to be implemented as time and money allow.
+Things such as Compute, D3D12 and AV1 are all going to be implemented as time and testing allow.
