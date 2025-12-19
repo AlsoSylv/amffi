@@ -6,9 +6,17 @@ use std::{
 
 use amffi::{
     amf_init,
-    components::video_encoder_vce::{
-        AMF_VIDEO_ENCODER_FRAMERATE, AMF_VIDEO_ENCODER_FRAMESIZE, AMF_VIDEO_ENCODER_TARGET_BITRATE,
-        AMF_VIDEO_ENCODER_USAGE, AMF_VIDEO_ENCODER_VCE_AVC, AMFVideoEncoderUsage,
+    components::{
+        video_encoder_hevc::{
+            AMF_VIDEO_ENCODER_HEVC, AMF_VIDEO_ENCODER_HEVC_FRAMERATE,
+            AMF_VIDEO_ENCODER_HEVC_FRAMESIZE, AMF_VIDEO_ENCODER_HEVC_TARGET_BITRATE,
+            AMF_VIDEO_ENCODER_HEVC_USAGE, AMFVideoEncoderHevcUsage,
+        },
+        video_encoder_vce::{
+            AMF_VIDEO_ENCODER_FRAMERATE, AMF_VIDEO_ENCODER_FRAMESIZE,
+            AMF_VIDEO_ENCODER_TARGET_BITRATE, AMF_VIDEO_ENCODER_USAGE, AMF_VIDEO_ENCODER_VCE_AVC,
+            AMFVideoEncoderUsage,
+        },
     },
     core::{
         buffer::AMFBuffer,
@@ -20,7 +28,7 @@ use amffi::{
         trace::{AMFTraceWriterConsole, AMFTraceWriterDebugOutput},
     },
 };
-use widestring::widecstr;
+use widestring::{WideCStr, widecstr};
 
 #[cfg(windows)]
 use windows::{
@@ -32,6 +40,10 @@ use windows::{
 const MEMORY_TYPE: amffi::core::data::AMFMemoryType = amffi::core::data::AMFMemoryType::DX11;
 #[cfg(target_os = "linux")]
 const MEMORY_TYPE: amffi::core::data::AMFMemoryType = amffi::core::data::AMFMemoryType::Vulkan;
+
+const CODEC_IDX: usize = 0;
+const CODECS: [&WideCStr; 2] = [AMF_VIDEO_ENCODER_VCE_AVC, AMF_VIDEO_ENCODER_HEVC];
+const CODEC_PATH: [&str; 2] = ["output.h264", "output.h265"];
 
 const WIDTH: i32 = 1920;
 const HEIGHT: i32 = 1080;
@@ -65,26 +77,48 @@ fn main() {
     let (surface_1, surface_2) = prepare_fill_from_host(&context).unwrap();
 
     let encoder = factory
-        .create_component(&context, AMF_VIDEO_ENCODER_VCE_AVC)
+        .create_component(&context, CODECS[CODEC_IDX])
         .unwrap();
 
-    encoder
-        .set_property(
-            AMF_VIDEO_ENCODER_USAGE,
-            AMFVideoEncoderUsage::Transcoding as i64,
-        )
-        .unwrap();
-    encoder
-        .set_property(AMF_VIDEO_ENCODER_TARGET_BITRATE, 5000000i64)
-        .unwrap();
-    let size = AMFSize::new(WIDTH, HEIGHT);
-    encoder
-        .set_property(AMF_VIDEO_ENCODER_FRAMESIZE, size)
-        .unwrap();
-    let rate = AMFRate::new(30, 1);
-    encoder
-        .set_property(AMF_VIDEO_ENCODER_FRAMERATE, rate)
-        .unwrap();
+    if CODECS[CODEC_IDX] == AMF_VIDEO_ENCODER_VCE_AVC {
+        encoder
+            .set_property(
+                AMF_VIDEO_ENCODER_USAGE,
+                AMFVideoEncoderUsage::Transcoding as i64,
+            )
+            .unwrap();
+        encoder
+            .set_property(AMF_VIDEO_ENCODER_TARGET_BITRATE, 5_000_000i64)
+            .unwrap();
+        let size = AMFSize::new(WIDTH, HEIGHT);
+        encoder
+            .set_property(AMF_VIDEO_ENCODER_FRAMESIZE, size)
+            .unwrap();
+        let rate = AMFRate::new(30, 1);
+        encoder
+            .set_property(AMF_VIDEO_ENCODER_FRAMERATE, rate)
+            .unwrap();
+    }
+
+    if CODECS[CODEC_IDX] == AMF_VIDEO_ENCODER_HEVC {
+        encoder
+            .set_property(
+                AMF_VIDEO_ENCODER_HEVC_USAGE,
+                AMFVideoEncoderHevcUsage::Transcoding as i64,
+            )
+            .unwrap();
+        encoder
+            .set_property(AMF_VIDEO_ENCODER_HEVC_TARGET_BITRATE, 5_000_000i64)
+            .unwrap();
+        let size = AMFSize::new(WIDTH, HEIGHT);
+        encoder
+            .set_property(AMF_VIDEO_ENCODER_HEVC_FRAMESIZE, size)
+            .unwrap();
+        let rate = AMFRate::new(30, 1);
+        encoder
+            .set_property(AMF_VIDEO_ENCODER_HEVC_FRAMERATE, rate)
+            .unwrap();
+    }
 
     encoder
         .init(amffi::core::surface::AMFSurfaceFormat::Nv12, WIDTH, HEIGHT)
@@ -93,7 +127,7 @@ fn main() {
     let handle = std::thread::spawn({
         let encoder = encoder.clone();
         move || {
-            let mut file = File::create("./output.h264").unwrap();
+            let mut file = File::create(CODEC_PATH[CODEC_IDX]).unwrap();
             loop {
                 let output = encoder.query_output();
                 match output {
