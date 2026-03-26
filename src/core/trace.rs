@@ -11,7 +11,10 @@ use widestring::{WideCStr, WideCString, WideChar, error::ContainsNul, widecstr};
 
 use crate::{
     core::{
-        audio_buffer::AMFAudioFormat, data::AMFMemoryType, result::{AMFError, AMFResult}, surface::AMFSurfaceFormat
+        audio_buffer::AMFAudioFormat,
+        data::AMFMemoryType,
+        result::{AMFError, AMFResult},
+        surface::AMFSurfaceFormat,
     },
     stdcall,
 };
@@ -192,7 +195,8 @@ pub struct AMFTraceVtbl {
         stdcall!(fn(this: *mut *const Self, name: *const WideChar) -> AMFMemoryType),
     get_sample_format_name:
         stdcall!(fn(this: *mut *const Self, audio_format: AMFAudioFormat) -> *const WideChar),
-    get_sample_format_by_name: stdcall!(fn(this: *mut *const Self, name: *const WideChar) -> AMFAudioFormat),
+    get_sample_format_by_name:
+        stdcall!(fn(this: *mut *const Self, name: *const WideChar) -> AMFAudioFormat),
 }
 
 impl AMFTrace {

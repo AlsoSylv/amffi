@@ -654,7 +654,7 @@ impl AMFCompute {
     pub fn finish_queue(&self) -> Result<(), AMFError> {
         unsafe { (self.vtable().finish_queue)(self.as_raw()).into_error() }
     }
-    
+
     pub fn flush_queue(&self) -> Result<(), AMFError> {
         unsafe { (self.vtable().flush_queue)(self.as_raw()).into_error() }
     }

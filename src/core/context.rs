@@ -191,13 +191,21 @@ impl AMFContext {
     #[cfg(windows)]
     pub fn init_dx11(
         &self,
-        device: ID3D11Device,
+        device: Option<ID3D11Device>,
         dx_version: AMFDXVersion,
     ) -> Result<(), AMFError> {
         use windows::core::Interface;
 
         unsafe {
-            (self.vtable().init_dx11)(self.as_raw(), device.as_raw(), dx_version).into_error()
+            (self.vtable().init_dx11)(
+                self.as_raw(),
+                device
+                    .as_ref()
+                    .map(ID3D11Device::as_raw)
+                    .unwrap_or(null_mut()),
+                dx_version,
+            )
+            .into_error()
         }
     }
 
@@ -252,17 +260,17 @@ impl AMFContext {
         buffer: &ID3D11Texture2D,
     ) -> Result<AMFSurface, AMFError> {
         use windows::core::Interface;
-        let mut surface = AMFSurface::default();
+        let mut surface = std::mem::MaybeUninit::uninit();
         unsafe {
             (self.vtable().create_surface_from_dx11_native)(
                 self.as_raw(),
                 buffer.as_raw(),
-                &raw mut surface,
+                surface.as_mut_ptr(),
                 std::ptr::null_mut(),
             )
         }
         .into_error()?;
-        Ok(surface)
+        Ok(unsafe { surface.assume_init() })
     }
 
     pub fn get_compute(&self, memory_type: AMFMemoryType) -> Result<AMFCompute, AMFError> {
