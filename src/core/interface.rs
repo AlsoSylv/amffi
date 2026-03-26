@@ -3,18 +3,22 @@ use std::{ffi::c_void, ptr::null_mut};
 pub use crate::core::platform::Guid;
 
 use crate::{
-    core::result::{AMFError, AMFResult},
+    core::{
+        interface::sealed::Sealed,
+        result::{AMFError, AMFResult},
+    },
     stdcall,
 };
 
+pub(crate) mod sealed {
+    pub trait Sealed {}
+}
+
+/// This structure contains a pointer to the AMFInterfaceVtbl
+/// This is meant as a base struct or class in C++
+/// This struct can be cast using `cast::<T>` which checks for validity
 #[repr(transparent)]
 pub struct AMFInterface(*mut *const <Self as Interface>::Vtbl);
-
-impl Default for AMFInterface {
-    fn default() -> Self {
-        Self(std::ptr::null_mut())
-    }
-}
 
 #[repr(C)]
 pub struct AMFInterfaceVtbl {
@@ -41,47 +45,53 @@ impl Clone for AMFInterface {
 
 impl Drop for AMFInterface {
     fn drop(&mut self) {
+        // If `self.0` is not null, the reference count can be decrimented
         if !self.0.is_null() {
             unsafe { (self.vtable().release)(self.as_raw()) };
         }
     }
 }
 
-pub trait Interface {
+pub trait Interface: Sealed + Clone {
+    #[doc(hidden)]
     type Vtbl;
 
+    #[doc(hidden)]
     const GUID: Guid;
 
+    #[doc(hidden)]
     fn as_raw_interface(&self) -> *mut *const AMFInterfaceVtbl;
 
     #[inline(always)]
-    fn as_interface(&self) -> &AMFInterfaceVtbl {
-        unsafe { &**self.as_raw_interface() }
-    }
-
-    #[inline(always)]
-    fn cast<T>(&self) -> Result<T, AMFError>
-    where
-        T: Interface,
-    {
-        let mut new = null_mut();
-        unsafe {
-            (self.as_interface().query_interface)(self.as_raw_interface(), &T::GUID, &raw mut new)
-        }
-        .into_error()?;
-        unsafe { Ok(std::mem::transmute_copy(&new)) }
-    }
-
-    #[inline(always)]
+    #[doc(hidden)]
     fn as_raw(&self) -> *mut *const Self::Vtbl {
         self.as_raw_interface() as _
     }
 
     #[inline(always)]
+    #[doc(hidden)]
     fn vtable(&self) -> &Self::Vtbl {
         unsafe { &**self.as_raw() }
     }
+
+    #[inline(always)]
+    /// Checked cast using `query_interface`, incriments the reference count
+    fn cast<T>(&self) -> Result<T, AMFError>
+    where
+        T: Interface,
+    {
+        let mut new = null_mut();
+        // Safety: The caller is a valid reference to `AMFInterface`, meaning it contains a NonNull pointer
+        unsafe {
+            let interface = &**self.as_raw_interface();
+            (interface.query_interface)(self.as_raw_interface(), &T::GUID, &raw mut new)
+        }
+        .into_error()?;
+        unsafe { Ok(std::mem::transmute_copy(&new)) }
+    }
 }
+
+impl Sealed for AMFInterface {}
 
 impl Interface for AMFInterface {
     type Vtbl = AMFInterfaceVtbl;

@@ -8,7 +8,10 @@ amffi is a wrapper of [Advanced Media Framework's](https://github.com/GPUOpen-Li
 
 This works as a cross platform COM style API, in a similar way to AMDs own examples.
 
-32-bit environments are currently supported through the usage of macros to change the calling convention between x86_64 and x86, and any breakage is considered a bug
+32-bit environments are currently supported through the usage of macros to change the calling convention between x86_64 and x86, and any breakage is considered a bug.
+
+Please note, while this compiles on any OS and hardware, testing it on Linux requires installing the driver itself.
+For RDNA 3 and above users, AMD has a guide [here](https://github.com/GPUOpen-LibrariesAndSDKs/AMF/wiki), for RDNA 2 and 1 users I have written a guide [here](https://gist.github.com/AlsoSylv/d4a46937458d9d26b29d5c4835f9b5d4).
 
 ```c++
 #include "public/common/AMFFactory.h"
@@ -36,22 +39,60 @@ fn main() {
 }
 ```
 
-This creates an AMF context, which can then be used like a COM-API
+Examples are WIP, and are direct ports of AMF C++ examples, and are not nessicarily the best way to use the wrapper. For example:
+
+```cxx
+    if (memoryTypeIn == amf::AMF_MEMORY_VULKAN)
+    {
+        res = amf::AMFContext1Ptr(context)->InitVulkan(NULL);
+        AMF_RETURN_IF_FAILED(res, L"InitVulkan(NULL) failed");
+        PrepareFillFromHost(context, memoryTypeIn, formatIn, widthIn, heightIn, false);
+    }
+#ifdef _WIN32
+    if (memoryTypeIn == amf::AMF_MEMORY_DX11)
+    {
+        res = context->InitDX11(NULL); // can be DX11 device
+        AMF_RETURN_IF_FAILED(res, L"InitDX11(NULL) failed");
+        PrepareFillFromHost(context, memoryTypeIn, formatIn, widthIn, heightIn, false);
+    }
+#endif
+```
+
+```rs
+    #[cfg(windows)]
+    if MEMORY_TYPE == amffi::core::data::AMFMemoryType::DX11 {
+        context
+            .init_dx11(
+                None,
+                amffi::core::data::AMFDXVersion::DX11_0,
+            )
+            .unwrap()
+    }
+    if MEMORY_TYPE == amffi::core::data::AMFMemoryType::Vulkan {
+        context.init_vulkan(None).unwrap();
+    }
+```
+
+Examples are meant to display how to use functionality, and make it easy to compare code to the C++ code.
 
 Certain APIs, such as buffer observers, have been wrapped to create a more idiomatic feeling API, such as 
 
 ```rust
-fn import_dx_buffer(context: &AMFContext, buffer: &ID3D11Texture2D) {
-    let surface: AMFSurface = context.create_surface_from_dx11_native(buffer);
-    surface.add_observer(|surface: AMFSurface| {
-        println!("Releasing!");
-    });
+fn import_dx_buffer(context: &AMFContext, tex: &ID3D11Texture2D) {
+    let surface: AMFSurface = context.create_surface_from_dx11_native(tex);
+    // Observers are unsafe, as they create a cyclical lifetime
+    let observer_handle = unsafe {
+        surface.add_observer(|surface: AMFSurface| {
+            println!("Releasing!");
+        });
+    }
 }
 ```
 
 This is done by creating trait wrappers for the equivalent C++ interface, such as:
 ```rust
-pub trait SurfaceObserver {
+// This means both adding traits, and implementing Observer is unsafe
+pub unsafe trait SurfaceObserver {
     fn on_surface_data_release(&mut self, surface: AMFSurface);
 }
 ```
@@ -77,9 +118,9 @@ impl<T: SurfaceObserver> InternalSurfaceObserver<T> {
 }
 
 stdcall! {
-    fn internal_observer<T: SurfaceObserver>(this: *mut *const AMFSurfaceObserverVtbl, surface: AMFSurface) {
+    fn internal_observer<T: SurfaceObserver>(this: *mut *const AMFSurfaceObserverVtbl, surface: ManuallyDrop<AMFSurface>) {
         let this = unsafe { &mut *(this as *mut InternalSurfaceObserver<T>) };
-        this.this.on_surface_data_release(surface);
+        this.this.on_surface_data_release(^surface);
     }
 }
 ```
@@ -91,5 +132,4 @@ public:
 };
 ```
 
-Not all features are currently implemented, but are planned.
-Things such as Compute, D3D12 and AV1 are all going to be implemented as time and testing allow.
+If a feature required for your work is missing, please open an issue.

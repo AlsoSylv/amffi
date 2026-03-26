@@ -8,6 +8,7 @@ use widestring::{WideCStr, WideChar};
 
 use crate::{
     core::{
+        compute::AMFPrograms,
         context::{AMFContext, AMFContextVtbl},
         debug::AMFDebug,
         interface::Interface,
@@ -63,14 +64,11 @@ pub struct AMFFactoryVtbl {
             component: *mut AMFComponent,
         ) -> AMFResult
     ),
-    // TODO: Expose in wrapper function
     set_cache_folder: stdcall!(fn(this: *mut *const Self, path: *const WideChar) -> AMFResult),
-    // TODO: Expose in wrapper function
     get_cache_folder: stdcall!(fn(this: *mut *const Self) -> *const WideChar),
     get_debug: stdcall!(fn(this: *mut *const Self, debug: *mut AMFDebug) -> AMFResult),
     get_trace: stdcall!(fn(this: *mut *const Self, trace: *mut AMFTrace) -> AMFResult),
-    // TODO: Add programs support
-    get_programs: *mut (),
+    get_programs: stdcall!(fn(this: *mut *const Self, programs: *mut AMFPrograms) -> AMFResult),
 }
 
 #[repr(C)]
@@ -86,9 +84,10 @@ impl AMFFactory {
     }
 
     pub fn create_context(&self) -> Result<AMFContext, AMFError> {
-        let mut context = AMFContext::default();
-        unsafe { (self.vtable().create_context)(self.as_raw(), &raw mut context) }.into_error()?;
-        Ok(context)
+        let mut context = std::mem::MaybeUninit::uninit();
+        unsafe { (self.vtable().create_context)(self.as_raw(), context.as_mut_ptr()) }
+            .into_error()?;
+        Ok(unsafe { context.assume_init() })
     }
 
     pub fn create_component(
@@ -96,17 +95,17 @@ impl AMFFactory {
         context: &AMFContext,
         name: &WideCStr,
     ) -> Result<AMFComponent, AMFError> {
-        let mut component = AMFComponent::default();
+        let mut component = std::mem::MaybeUninit::uninit();
         unsafe {
             (self.vtable().create_component)(
                 self.as_raw(),
                 context.as_raw(),
                 name.as_ptr(),
-                &raw mut component,
+                component.as_mut_ptr(),
             )
         }
         .into_error()?;
-        Ok(component)
+        Ok(unsafe { component.assume_init() })
     }
 
     pub fn get_cache_folder(&self) -> PathBuf {
@@ -121,15 +120,22 @@ impl AMFFactory {
     }
 
     pub fn get_debug(&self) -> Result<AMFDebug, AMFError> {
-        let mut debug = AMFDebug::default();
-        unsafe { (self.vtable().get_debug)(self.as_raw(), &raw mut debug).into_error()? };
-        Ok(debug)
+        let mut debug = std::mem::MaybeUninit::uninit();
+        unsafe { (self.vtable().get_debug)(self.as_raw(), debug.as_mut_ptr()).into_error()? };
+        Ok(unsafe { debug.assume_init() })
     }
 
     pub fn get_trace(&self) -> Result<AMFTrace, AMFError> {
-        let mut trace = AMFTrace::default();
-        unsafe { (self.vtable().get_trace)(self.as_raw(), &raw mut trace).into_error()? };
-        Ok(trace)
+        let mut trace = std::mem::MaybeUninit::uninit();
+        unsafe { (self.vtable().get_trace)(self.as_raw(), trace.as_mut_ptr()).into_error()? };
+        Ok(unsafe { trace.assume_init() })
+    }
+
+    pub fn get_programs(&self) -> Result<AMFPrograms, AMFError> {
+        let mut programs = std::mem::MaybeUninit::uninit();
+        unsafe { (self.vtable().get_programs)(self.as_raw(), programs.as_mut_ptr()) }
+            .into_error()?;
+        Ok(unsafe { programs.assume_init() })
     }
 }
 

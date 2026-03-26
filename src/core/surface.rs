@@ -110,22 +110,22 @@ impl<T: SurfaceObserver> InternalSurfaceObserver<T> {
     }
 }
 
-pub trait SurfaceObserver {
-    fn on_surface_data_release(&mut self, surface: ManuallyDrop<AMFSurface>);
+pub unsafe trait SurfaceObserver {
+    fn on_surface_data_release(&mut self, surface: &AMFSurface);
 }
 
 stdcall! {
     fn internal_observer<T: SurfaceObserver>(this: *mut *const AMFSurfaceObserverVtbl, surface: ManuallyDrop<AMFSurface>) {
         let this = unsafe { &mut *(this as *mut InternalSurfaceObserver<T>) };
-        this.this.on_surface_data_release(surface);
+        this.this.on_surface_data_release(&surface);
     }
 }
 
-impl<T> SurfaceObserver for T
+unsafe impl<T> SurfaceObserver for T
 where
-    T: FnMut(ManuallyDrop<AMFSurface>),
+    T: FnMut(&AMFSurface),
 {
-    fn on_surface_data_release(&mut self, surface: ManuallyDrop<AMFSurface>) {
+    fn on_surface_data_release(&mut self, surface: &AMFSurface) {
         self(surface)
     }
 }
@@ -135,20 +135,20 @@ where
 fn test_function_observer() {
     {
         let mut captures = false;
-        let observer = |_: ManuallyDrop<AMFSurface>| {
+        let observer = |_: &AMFSurface| {
             captures = true;
         };
         InternalSurfaceObserver::new(observer);
     }
 
     {
-        fn observer(_: ManuallyDrop<AMFSurface>) {}
+        fn observer(_: &AMFSurface) {}
         InternalSurfaceObserver::new(observer);
     }
 }
 
 #[repr(transparent)]
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct AMFSurface(<Self as std::ops::Deref>::Target);
 
 #[repr(C)]
@@ -234,35 +234,36 @@ impl AMFSurface {
         .into_error()
     }
 
-    pub fn add_observer<T: SurfaceObserver>(&self, observer: T) -> SurfaceObserverHandle<T> {
+    /// # SAFETY:
+    /// Observers MUST be removed from the surface OR the surface must be dropped
+    pub unsafe fn add_observer<T: SurfaceObserver>(&self, observer: T) -> SurfaceObserverHandle<T> {
         let internal_observer = Box::into_raw(Box::new(InternalSurfaceObserver::new(observer)));
         unsafe { (self.vtable().add_observer)(self.as_raw(), internal_observer as _) };
         SurfaceObserverHandle {
             ptr: internal_observer,
-            surface: self.clone(),
         }
     }
 
     pub fn remove_observer<T: SurfaceObserver>(&self, handle: SurfaceObserverHandle<T>) {
-        drop(handle)
+        unsafe { (self.vtable().remove_observer)(self.as_raw(), handle.ptr as _) };
     }
 }
 
 pub struct SurfaceObserverHandle<T: SurfaceObserver> {
     ptr: *mut InternalSurfaceObserver<T>,
-    surface: AMFSurface,
 }
 
 impl<T: SurfaceObserver> Drop for SurfaceObserverHandle<T> {
     fn drop(&mut self) {
-        // Safety: `*mut InternalSurfaceObserver<T>` is always `*mut *const AMFSurfaceObserverVtbl`
-        unsafe { (self.surface.vtable().remove_observer)(self.surface.as_raw(), self.ptr as _) };
         // Safety: This was allocated as a Box and then leaked
+        // If the observer was not removed from the surface, this will cause a segfault
         unsafe {
             drop(Box::from_raw(self.ptr));
         };
     }
 }
+
+impl super::interface::sealed::Sealed for AMFSurface {}
 
 impl Interface for AMFSurface {
     type Vtbl = AMFSurfaceVtbl;

@@ -7,6 +7,11 @@ use std::{
 use amffi::{
     amf_init,
     components::{
+        video_encoder_av1::{
+            AMF_VIDEO_ENCODER_AV1, AMF_VIDEO_ENCODER_AV1_FRAMERATE,
+            AMF_VIDEO_ENCODER_AV1_FRAMESIZE, AMF_VIDEO_ENCODER_AV1_TARGET_BITRATE,
+            AMF_VIDEO_ENCODER_AV1_USAGE,
+        },
         video_encoder_hevc::{
             AMF_VIDEO_ENCODER_HEVC, AMF_VIDEO_ENCODER_HEVC_FRAMERATE,
             AMF_VIDEO_ENCODER_HEVC_FRAMESIZE, AMF_VIDEO_ENCODER_HEVC_TARGET_BITRATE,
@@ -42,8 +47,12 @@ const MEMORY_TYPE: amffi::core::data::AMFMemoryType = amffi::core::data::AMFMemo
 const MEMORY_TYPE: amffi::core::data::AMFMemoryType = amffi::core::data::AMFMemoryType::Vulkan;
 
 const CODEC_IDX: usize = 0;
-const CODECS: [&WideCStr; 2] = [AMF_VIDEO_ENCODER_VCE_AVC, AMF_VIDEO_ENCODER_HEVC];
-const CODEC_PATH: [&str; 2] = ["output.h264", "output.h265"];
+const CODECS: [&WideCStr; 3] = [
+    AMF_VIDEO_ENCODER_VCE_AVC,
+    AMF_VIDEO_ENCODER_HEVC,
+    AMF_VIDEO_ENCODER_AV1,
+];
+const CODEC_PATH: [&str; 3] = ["output.h264", "output.h265", "output.av1"];
 
 const WIDTH: i32 = 1920;
 const HEIGHT: i32 = 1080;
@@ -61,19 +70,17 @@ fn main() {
     let context = context.cast::<AMFContext1>().unwrap();
     #[cfg(windows)]
     if MEMORY_TYPE == amffi::core::data::AMFMemoryType::DX11 {
-        unsafe {
-            context
-                .init_dx11_raw(
-                    std::ptr::null_mut(),
-                    amffi::core::data::AMFDXVersion::DX11_0,
-                )
-                .unwrap()
-        };
+        context
+            .init_dx11(
+                None,
+                amffi::core::data::AMFDXVersion::DX11_0,
+            )
+            .unwrap()
     }
     if MEMORY_TYPE == amffi::core::data::AMFMemoryType::Vulkan {
         context.init_vulkan(None).unwrap();
     }
-    #[allow(unused)]
+
     let (surface_1, surface_2) = prepare_fill_from_host(&context).unwrap();
 
     let encoder = factory
@@ -117,6 +124,26 @@ fn main() {
         let rate = AMFRate::new(30, 1);
         encoder
             .set_property(AMF_VIDEO_ENCODER_HEVC_FRAMERATE, rate)
+            .unwrap();
+    }
+
+    if CODECS[CODEC_IDX] == AMF_VIDEO_ENCODER_AV1 {
+        encoder
+            .set_property(
+                AMF_VIDEO_ENCODER_AV1_USAGE,
+                AMFVideoEncoderHevcUsage::Transcoding as i64,
+            )
+            .unwrap();
+        encoder
+            .set_property(AMF_VIDEO_ENCODER_AV1_TARGET_BITRATE, 5_000_000i64)
+            .unwrap();
+        let size = AMFSize::new(WIDTH, HEIGHT);
+        encoder
+            .set_property(AMF_VIDEO_ENCODER_AV1_FRAMESIZE, size)
+            .unwrap();
+        let rate = AMFRate::new(30, 1);
+        encoder
+            .set_property(AMF_VIDEO_ENCODER_AV1_FRAMERATE, rate)
             .unwrap();
     }
 
@@ -218,14 +245,12 @@ fn main() {
             surface_in
         };
     }
-
-    loop {
-        let res = encoder.drain();
-        if res == Ok(()) {
-            break;
-        }
+    let mut res = encoder.drain();
+    while res != Ok(()) {
+        res = encoder.drain();
     }
 
+    // Stop the encoding thread, even though it's already finished
     let _ = handle.join();
 
     encoder.terminate().unwrap();

@@ -1,5 +1,6 @@
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(C)]
+#[must_use]
 pub enum AMFResult {
     Ok = 0,
     Fail,
