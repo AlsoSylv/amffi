@@ -67,6 +67,8 @@ impl AMFPlane {
     }
 }
 
+impl super::interface::sealed::Sealed for AMFPlane {}
+
 impl Interface for AMFPlane {
     type Vtbl = AMFPlaneVtbl;
 

@@ -1,9 +1,11 @@
+use widestring::{WideCStr, WideChar};
+
 use crate::{
     core::{
-        interface::{Guid, Interface},
+        interface::{AMFInterface, Guid, Interface},
         property_storage::{AMFPropertyStorage, AMFPropertyStorageVtbl},
-        result::AMFResult,
-        variant::{AMFVariantStruct, AMFVariantType},
+        result::{AMFError, AMFResult},
+        variant::{AMFVariant, AMFVariantStruct, AMFVariantType, AMFVariants},
     },
     stdcall,
 };
@@ -45,31 +47,27 @@ pub struct AMFPropertyInfo {
 }
 
 #[repr(transparent)]
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct AMFPropertyStorageEx(<Self as std::ops::Deref>::Target);
 
 #[repr(C)]
 pub struct AMFPropertyStorageExVtbl {
     base: AMFPropertyStorageVtbl,
-    get_properties_info_count: stdcall!(fn(this: *mut *const AMFPropertyStorageExVtbl) -> isize),
+    get_properties_info_count: stdcall!(fn(this: *mut *const Self) -> isize),
     get_property_info_at: stdcall!(
-        fn(
-            this: *mut *const AMFPropertyStorageExVtbl,
-            idx: isize,
-            info: *const *mut AMFPropertyInfo,
-        ) -> AMFResult
+        fn(this: *mut *const Self, idx: isize, info: *mut *const AMFPropertyInfo) -> AMFResult
     ),
     get_property_info: stdcall!(
         fn(
-            this: *mut *const AMFPropertyStorageExVtbl,
-            name: *const u16,
-            info: *const *mut AMFPropertyInfo,
+            this: *mut *const Self,
+            name: *const WideChar,
+            info: *mut *const AMFPropertyInfo,
         ) -> AMFResult
     ),
     validate_property: stdcall!(
         fn(
-            this: *mut *const AMFPropertyStorageExVtbl,
-            name: *const u16,
+            this: *mut *const Self,
+            name: *const WideChar,
             value: AMFVariantStruct,
             out_validated: *mut AMFVariantStruct,
         ) -> AMFResult
@@ -80,7 +78,44 @@ impl AMFPropertyStorageEx {
     pub fn get_properties_info_count(&self) -> isize {
         unsafe { (self.vtable().get_properties_info_count)(self.as_raw()) }
     }
+
+    pub fn get_property_info_at(&self, idx: isize) -> Result<&AMFPropertyInfo, AMFError> {
+        let mut ptr = std::ptr::null();
+        unsafe { (self.vtable().get_property_info_at)(self.as_raw(), idx, &raw mut ptr) }
+            .into_error()?;
+
+        Ok(unsafe { &*ptr })
+    }
+
+    pub fn get_property_info(&self, name: &WideCStr) -> Result<&AMFPropertyInfo, AMFError> {
+        let mut ptr = std::ptr::null();
+        unsafe { (self.vtable().get_property_info)(self.as_raw(), name.as_ptr(), &raw mut ptr) }
+            .into_error()?;
+
+        Ok(unsafe { &*ptr })
+    }
+
+    pub fn validate_property(
+        &self,
+        name: &WideCStr,
+        value: impl AMFVariant,
+    ) -> Result<AMFVariants<'_, AMFInterface>, AMFError> {
+        let mut out = std::mem::MaybeUninit::uninit();
+        unsafe {
+            (self.vtable().validate_property)(
+                self.as_raw(),
+                name.as_ptr(),
+                value.to_variant(),
+                out.as_mut_ptr(),
+            )
+        }
+        .into_error()?;
+
+        Ok(unsafe { out.assume_init().into() })
+    }
 }
+
+impl super::interface::sealed::Sealed for AMFPropertyStorageEx {}
 
 impl Interface for AMFPropertyStorageEx {
     type Vtbl = AMFPropertyStorageExVtbl;

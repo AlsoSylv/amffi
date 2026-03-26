@@ -44,25 +44,24 @@ pub enum AMFDXVersion {
     DX12 = 120,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct AMFData(<Self as std::ops::Deref>::Target);
 
 #[repr(C)]
 pub struct AMFDataVtbl {
     base: AMFPropertyStorageVtbl,
-    get_memory_type: stdcall!(fn(this: *mut *const AMFDataVtbl) -> AMFMemoryType),
-    duplicate: stdcall!(
-        fn(this: *mut *const AMFDataVtbl, ty: AMFMemoryType, data: *mut AMFData) -> AMFResult
-    ),
-    convert: stdcall!(fn(this: *mut *const AMFDataVtbl, ty: AMFMemoryType) -> AMFResult),
-    interop: stdcall!(fn(this: *mut *const AMFDataVtbl, ty: AMFMemoryType) -> AMFResult),
-    get_data_type: stdcall!(fn(this: *mut *const AMFDataVtbl) -> AMFDataType),
-    is_reusable: stdcall!(fn(this: *mut *const AMFDataVtbl) -> bool),
-    set_pts: stdcall!(fn(this: *mut *const AMFDataVtbl, pts: i64)),
-    get_pts: stdcall!(fn(this: *mut *const AMFDataVtbl) -> i64),
-    set_duration: stdcall!(fn(this: *mut *const AMFDataVtbl, duration: i64)),
-    get_duration: stdcall!(fn(this: *mut *const AMFDataVtbl) -> i64),
+    get_memory_type: stdcall!(fn(this: *mut *const Self) -> AMFMemoryType),
+    duplicate:
+        stdcall!(fn(this: *mut *const Self, ty: AMFMemoryType, data: *mut AMFData) -> AMFResult),
+    convert: stdcall!(fn(this: *mut *const Self, ty: AMFMemoryType) -> AMFResult),
+    interop: stdcall!(fn(this: *mut *const Self, ty: AMFMemoryType) -> AMFResult),
+    get_data_type: stdcall!(fn(this: *mut *const Self) -> AMFDataType),
+    is_reusable: stdcall!(fn(this: *mut *const Self) -> bool),
+    set_pts: stdcall!(fn(this: *mut *const Self, pts: i64)),
+    get_pts: stdcall!(fn(this: *mut *const Self) -> i64),
+    set_duration: stdcall!(fn(this: *mut *const Self, duration: i64)),
+    get_duration: stdcall!(fn(this: *mut *const Self) -> i64),
 }
 
 impl AMFData {
@@ -71,16 +70,46 @@ impl AMFData {
     }
 
     pub fn duplicate(&self) -> Result<AMFData, AMFError> {
-        let mut data = AMFData::default();
+        let mut data = std::mem::MaybeUninit::uninit();
         let ty = self.get_memory_type();
-        unsafe { (self.vtable().duplicate)(self.as_raw(), ty, &raw mut data) };
-        Ok(data)
+        unsafe { (self.vtable().duplicate)(self.as_raw(), ty, data.as_mut_ptr()).into_error()? };
+        Ok(unsafe { data.assume_init() })
     }
 
     pub fn convert(&self, ty: AMFMemoryType) -> Result<(), AMFError> {
         unsafe { (self.vtable().convert)(self.as_raw(), ty) }.into_error()
     }
+
+    pub fn interop(&self, ty: AMFMemoryType) -> Result<(), AMFError> {
+        unsafe { (self.vtable().interop)(self.as_raw(), ty) }.into_error()
+    }
+
+    pub fn get_data_type(&self) -> AMFDataType {
+        unsafe { (self.vtable().get_data_type)(self.as_raw()) }
+    }
+
+    pub fn is_reusable(&self) -> bool {
+        unsafe { (self.vtable().is_reusable)(self.as_raw()) }
+    }
+
+    pub fn set_pts(&self, pts: i64) {
+        unsafe { (self.vtable().set_pts)(self.as_raw(), pts) }
+    }
+
+    pub fn get_pts(&self) -> i64 {
+        unsafe { (self.vtable().get_pts)(self.as_raw()) }
+    }
+
+    pub fn set_duration(&self, duration: i64) {
+        unsafe { (self.vtable().set_duration)(self.as_raw(), duration) }
+    }
+
+    pub fn get_duration(&self) -> i64 {
+        unsafe { (self.vtable().get_duration)(self.as_raw()) }
+    }
 }
+
+impl super::interface::sealed::Sealed for AMFData {}
 
 impl Interface for AMFData {
     type Vtbl = AMFDataVtbl;

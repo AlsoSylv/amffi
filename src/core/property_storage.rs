@@ -19,7 +19,7 @@ pub struct AMFPropertyStorageObserverVtbl {
     on_property_changed: stdcall!(fn(this: *mut *const Self, name: *const u16)),
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct AMFPropertyStorage(<Self as std::ops::Deref>::Target);
 
@@ -38,6 +38,7 @@ pub struct AMFPropertyStorageVtbl {
     ),
     has_property: stdcall!(fn(this: *mut *const Self, name: *const WideChar) -> bool),
     get_property_count: stdcall!(fn(this: *mut *const Self) -> isize),
+    // TODO: How is this function supposed to be safely wrapped? The name likely cannot be exposed.
     get_property_at: stdcall!(
         fn(
             this: *mut *const Self,
@@ -54,6 +55,9 @@ pub struct AMFPropertyStorageVtbl {
     copy_to: stdcall!(
         fn(this: *mut *const Self, dst: *mut *const Self, overwrite: bool, deep: bool) -> AMFResult
     ),
+    // TODO: Add observers
+    // TODO: Observers are currently unsafe.
+    // To avoid exposing too many unsafe APIs, this will be hidden until a better solution is found
     add_observer: stdcall!(fn(this: *mut *const Self, observer: *mut AMFPropertyStorageObserver)),
     remove_observer:
         stdcall!(fn(this: *mut *const Self, observer: *mut AMFPropertyStorageObserver)),
@@ -93,6 +97,8 @@ impl AMFPropertyStorage {
             .into_error()
     }
 }
+
+impl super::interface::sealed::Sealed for AMFPropertyStorage {}
 
 impl Interface for AMFPropertyStorage {
     type Vtbl = AMFPropertyStorageVtbl;

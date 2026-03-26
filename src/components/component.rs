@@ -12,6 +12,7 @@ use crate::{
 };
 
 #[repr(C)]
+#[derive(Clone)]
 pub struct AMFDataAllocatorCB(AMFInterface);
 
 #[repr(C)]
@@ -19,7 +20,7 @@ pub struct AMFDataAllocatorCBVtbl {
     base: AMFInterfaceVtbl,
     alloc_buffer: stdcall!(
         fn(
-            this: *mut AMFDataAllocatorCB,
+            this: *mut Self,
             mem_ty: AMFMemoryType,
             size: isize,
             buffer: *mut *mut AMFBuffer,
@@ -27,7 +28,7 @@ pub struct AMFDataAllocatorCBVtbl {
     ),
     alloc_surface: stdcall!(
         fn(
-            this: *mut AMFDataAllocatorCB,
+            this: *mut Self,
             mem_ty: AMFMemoryType,
             format: AMFSurfaceFormat,
             width: i32,
@@ -38,6 +39,8 @@ pub struct AMFDataAllocatorCBVtbl {
         ) -> AMFResult
     ),
 }
+
+impl crate::core::interface::sealed::Sealed for AMFDataAllocatorCB {}
 
 impl Interface for AMFDataAllocatorCB {
     type Vtbl = AMFDataAllocatorCBVtbl;
@@ -66,7 +69,7 @@ pub struct AMFComponentOptimizationCallbackVtbl {
 }
 
 #[repr(transparent)]
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct AMFComponent(AMFPropertyStorageEx);
 
 unsafe impl Send for AMFComponent {}
@@ -75,32 +78,21 @@ unsafe impl Send for AMFComponent {}
 pub struct AMFComponentVtbl {
     base: AMFPropertyStorageExVtbl,
     init: stdcall!(
-        fn(
-            this: *mut *const AMFComponentVtbl,
-            format: AMFSurfaceFormat,
-            width: i32,
-            height: i32,
-        ) -> AMFResult
+        fn(this: *mut *const Self, format: AMFSurfaceFormat, width: i32, height: i32) -> AMFResult
     ),
-    re_init: stdcall!(fn(this: *mut *const AMFComponentVtbl, width: i32, height: i32) -> AMFResult),
-    terminate: stdcall!(fn(this: *mut *const AMFComponentVtbl) -> AMFResult),
-    drain: stdcall!(fn(this: *mut *const AMFComponentVtbl) -> AMFResult),
-    flush: stdcall!(fn(this: *mut *const AMFComponentVtbl) -> AMFResult),
-    submit_input: stdcall!(
-        fn(this: *mut *const AMFComponentVtbl, data: *mut *const AMFDataVtbl) -> AMFResult
-    ),
-    query_output: stdcall!(fn(this: *mut *const AMFComponentVtbl, data: *mut AMFData) -> AMFResult),
-    get_context: stdcall!(fn(this: *mut *const AMFComponentVtbl) -> AMFContext),
+    re_init: stdcall!(fn(this: *mut *const Self, width: i32, height: i32) -> AMFResult),
+    terminate: stdcall!(fn(this: *mut *const Self) -> AMFResult),
+    drain: stdcall!(fn(this: *mut *const Self) -> AMFResult),
+    flush: stdcall!(fn(this: *mut *const Self) -> AMFResult),
+    submit_input: stdcall!(fn(this: *mut *const Self, data: *mut *const AMFDataVtbl) -> AMFResult),
+    query_output: stdcall!(fn(this: *mut *const Self, data: *mut AMFData) -> AMFResult),
+    get_context: stdcall!(fn(this: *mut *const Self) -> AMFContext),
     // TODO: Figure out how to represent this in Rust
-    set_output_data_allocator_cb: stdcall!(
-        fn(this: *mut *const AMFComponentVtbl, callback: *mut AMFDataAllocatorCB) -> AMFResult
-    ),
-    get_caps: stdcall!(fn(this: *mut *const AMFComponentVtbl, *mut *mut AMFSurface) -> AMFResult),
+    set_output_data_allocator_cb:
+        stdcall!(fn(this: *mut *const Self, callback: *mut AMFDataAllocatorCB) -> AMFResult),
+    get_caps: stdcall!(fn(this: *mut *const Self, *mut *mut AMFSurface) -> AMFResult),
     optimize: stdcall!(
-        fn(
-            this: *mut *const AMFComponentVtbl,
-            callback: *mut AMFComponentOptimizationCallback,
-        ) -> AMFResult
+        fn(this: *mut *const Self, callback: *mut AMFComponentOptimizationCallback) -> AMFResult
     ),
 }
 
@@ -130,15 +122,17 @@ impl AMFComponent {
     }
 
     pub fn query_output(&self) -> Result<AMFData, AMFError> {
-        let mut data = AMFData::default();
-        unsafe { (self.vtable().query_output)(self.as_raw(), &raw mut data) }.into_error()?;
-        Ok(data)
+        let mut data = std::mem::MaybeUninit::uninit();
+        unsafe { (self.vtable().query_output)(self.as_raw(), data.as_mut_ptr()) }.into_error()?;
+        Ok(unsafe { data.assume_init() })
     }
 
     pub fn get_context(&self) -> AMFContext {
         unsafe { (self.vtable().get_context)(self.as_raw()) }
     }
 }
+
+impl crate::core::interface::sealed::Sealed for AMFComponent {}
 
 impl Interface for AMFComponent {
     type Vtbl = AMFComponentVtbl;

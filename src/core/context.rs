@@ -21,10 +21,8 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct AMFContext(<Self as std::ops::Deref>::Target);
-
-unsafe impl Send for AMFContext {}
 
 #[repr(C)]
 pub struct AMFContextVtbl {
@@ -233,7 +231,7 @@ impl AMFContext {
         width: i32,
         height: i32,
     ) -> Result<AMFSurface, AMFError> {
-        let mut surface = AMFSurface::default();
+        let mut surface = std::mem::MaybeUninit::uninit();
         unsafe {
             (self.vtable().alloc_surface)(
                 self.as_raw(),
@@ -241,11 +239,11 @@ impl AMFContext {
                 format,
                 width,
                 height,
-                &raw mut surface,
+                surface.as_mut_ptr(),
             )
         }
         .into_error()?;
-        Ok(surface)
+        Ok(unsafe { surface.assume_init() })
     }
 
     #[cfg(windows)]
@@ -268,12 +266,14 @@ impl AMFContext {
     }
 
     pub fn get_compute(&self, memory_type: AMFMemoryType) -> Result<AMFCompute, AMFError> {
-        let mut compute = AMFCompute::default();
-        unsafe { (self.vtable().get_compute)(self.as_raw(), memory_type, &raw mut compute) }
+        let mut compute = std::mem::MaybeUninit::uninit();
+        unsafe { (self.vtable().get_compute)(self.as_raw(), memory_type, compute.as_mut_ptr()) }
             .into_error()?;
-        Ok(compute)
+        Ok(unsafe { compute.assume_init() })
     }
 }
+
+impl super::interface::sealed::Sealed for AMFContext {}
 
 impl Interface for AMFContext {
     type Vtbl = AMFContextVtbl;
@@ -300,7 +300,10 @@ impl std::ops::Deref for AMFContext {
 }
 
 #[repr(transparent)]
+#[derive(Clone)]
 pub struct AMFContext1(AMFContext);
+
+impl super::interface::sealed::Sealed for AMFContext1 {}
 
 impl Interface for AMFContext1 {
     type Vtbl = AMFContext1Vtbl;
@@ -377,7 +380,7 @@ pub struct AMFContext1Vtbl {
     ),
 }
 
-impl AMFContext1 {    
+impl AMFContext1 {
     pub fn init_vulkan(&self, device: Option<&mut AMFVulkanDevice>) -> Result<(), AMFError> {
         let device = device.map(|d| d as *mut _).unwrap_or(null_mut());
         unsafe { (self.vtable().init_vulkan)(self.as_raw(), device) }.into_error()
@@ -401,34 +404,34 @@ impl AMFContext1 {
         &self,
         vulkan_surface: &mut AMFVulkanSurface,
     ) -> Result<AMFSurface, AMFError> {
-        let mut surface = AMFSurface::default();
+        let mut surface = std::mem::MaybeUninit::uninit();
         unsafe {
             (self.vtable().create_surface_from_vulkan_native)(
                 self.as_raw(),
                 vulkan_surface as *mut _ as _,
-                &raw mut surface,
+                surface.as_mut_ptr(),
                 std::ptr::null_mut(),
             )
         }
         .into_error()?;
-        Ok(surface)
+        Ok(unsafe { surface.assume_init() })
     }
 
     pub fn create_buffer_from_vulkan_native(
         &self,
         vulkan_buffer: &mut AMFVulkanBuffer,
     ) -> Result<AMFBuffer, AMFError> {
-        let mut surface = AMFBuffer::default();
+        let mut surface = std::mem::MaybeUninit::uninit();
         unsafe {
             (self.vtable().create_buffer_from_vulkan_native)(
                 self.as_raw(),
                 vulkan_buffer as *mut _ as _,
-                &raw mut surface,
+                surface.as_mut_ptr(),
                 std::ptr::null_mut(),
             )
         }
         .into_error()?;
-        Ok(surface)
+        Ok(unsafe { surface.assume_init() })
     }
 
     pub fn get_vulkan_device_extensions(&self) -> Result<Box<[CString]>, AMFError> {
@@ -466,7 +469,10 @@ impl std::ops::Deref for AMFContext1 {
 }
 
 #[repr(transparent)]
+#[derive(Clone)]
 pub struct AMFContext2(AMFContext1);
+
+impl super::interface::sealed::Sealed for AMFContext2 {}
 
 impl Interface for AMFContext2 {
     type Vtbl = AMFContext2Vtbl;

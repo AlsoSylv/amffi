@@ -10,6 +10,9 @@ This works as a cross platform COM style API, in a similar way to AMDs own examp
 
 32-bit environments are currently supported through the usage of macros to change the calling convention between x86_64 and x86, and any breakage is considered a bug
 
+Please note, while this compiles on any OS and hardware, testing it on Linux requires installing the driver itself.
+For RDNA 3 and above users, AMD has a guide [here](https://github.com/GPUOpen-LibrariesAndSDKs/AMF/wiki), for RDNA 2 and 1 users I have written a guide [here](https://gist.github.com/AlsoSylv/d4a46937458d9d26b29d5c4835f9b5d4).
+
 ```c++
 #include "public/common/AMFFactory.h"
 
@@ -77,9 +80,9 @@ impl<T: SurfaceObserver> InternalSurfaceObserver<T> {
 }
 
 stdcall! {
-    fn internal_observer<T: SurfaceObserver>(this: *mut *const AMFSurfaceObserverVtbl, surface: AMFSurface) {
+    fn internal_observer<T: SurfaceObserver>(this: *mut *const AMFSurfaceObserverVtbl, surface: ManuallyDrop<AMFSurface>) {
         let this = unsafe { &mut *(this as *mut InternalSurfaceObserver<T>) };
-        this.this.on_surface_data_release(surface);
+        this.this.on_surface_data_release(^surface);
     }
 }
 ```

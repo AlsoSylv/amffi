@@ -3,12 +3,6 @@ use crate::stdcall;
 #[repr(C)]
 pub struct AMFDebug(*mut *const AMFDebugVtbl);
 
-impl Default for AMFDebug {
-    fn default() -> Self {
-        AMFDebug(std::ptr::null_mut())
-    }
-}
-
 #[repr(C)]
 pub struct AMFDebugVtbl {
     enable_performance_monitor: stdcall!(fn(this: *mut *const Self, enable: bool)),

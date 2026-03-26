@@ -1,5 +1,7 @@
+pub mod audio_buffer;
 pub mod buffer;
 pub mod compute;
+pub mod compute_factory;
 pub mod context;
 pub mod data;
 pub mod debug;

@@ -11,9 +11,7 @@ use widestring::{WideCStr, WideCString, WideChar, error::ContainsNul, widecstr};
 
 use crate::{
     core::{
-        data::AMFMemoryType,
-        result::{AMFError, AMFResult},
-        surface::AMFSurfaceFormat,
+        audio_buffer::AMFAudioFormat, data::AMFMemoryType, result::{AMFError, AMFResult}, surface::AMFSurfaceFormat
     },
     stdcall,
 };
@@ -120,15 +118,8 @@ stdcall! {
 #[derive(Clone)]
 pub struct AMFTrace(*mut *const AMFTraceVtbl);
 
-impl Default for AMFTrace {
-    fn default() -> Self {
-        Self(std::ptr::null_mut())
-    }
-}
-
 #[repr(C)]
 pub struct AMFTraceVtbl {
-    // TODO: To wrap this properly, a VaList is required
     trace_w: stdcall!(
         fn(
             this: *mut *const Self,
@@ -141,6 +132,8 @@ pub struct AMFTraceVtbl {
             ...
         )
     ),
+    // This should be identical to trace_w but requires a proper va_list type.
+    // This is waiting on nightly feature `c_variadic`.
     trace: stdcall!(
         fn(
             this: *mut *const Self,
@@ -160,7 +153,6 @@ pub struct AMFTraceVtbl {
     // TODO: Find documentation before exposing
     trace_enable_async: stdcall!(fn(this: *mut *const Self, enable: bool) -> AMFResult),
     trace_flush: stdcall!(fn(this: *mut *const Self) -> AMFResult),
-    // TODO: Wrap path in `File` somehow
     set_path: stdcall!(fn(this: *mut *const Self, path: *const WideChar) -> AMFResult),
     get_path:
         stdcall!(fn(this: *mut *const Self, path: *mut WideChar, size: *mut isize) -> AMFResult),
@@ -198,10 +190,9 @@ pub struct AMFTraceVtbl {
         stdcall!(fn(this: *mut *const Self, mem_ty: AMFMemoryType) -> *const WideChar),
     get_memory_type_by_name:
         stdcall!(fn(this: *mut *const Self, name: *const WideChar) -> AMFMemoryType),
-    // TODO: AudioBuffer bindings, isize is being used in place of `AMFAudioFormat`
     get_sample_format_name:
-        stdcall!(fn(this: *mut *const Self, audio_format: isize) -> *const WideChar),
-    get_sample_format_by_name: stdcall!(fn(this: *mut *const Self, name: *const WideChar) -> isize),
+        stdcall!(fn(this: *mut *const Self, audio_format: AMFAudioFormat) -> *const WideChar),
+    get_sample_format_by_name: stdcall!(fn(this: *mut *const Self, name: *const WideChar) -> AMFAudioFormat),
 }
 
 impl AMFTrace {
@@ -393,6 +384,14 @@ impl AMFTrace {
 
     pub fn get_memory_type_by_name(&self, name: &WideCStr) -> AMFMemoryType {
         unsafe { (self.vtable().get_memory_type_by_name)(self.as_raw(), name.as_ptr()) }
+    }
+
+    pub fn get_sample_format_name(&self, format: AMFAudioFormat) -> &WideCStr {
+        let wstr = unsafe { (self.vtable().get_sample_format_name)(self.as_raw(), format) };
+        unsafe { WideCStr::from_ptr_str(wstr) }
+    }
+    pub fn get_sample_format_by_name(&self, name: &WideCStr) -> AMFAudioFormat {
+        unsafe { (self.vtable().get_sample_format_by_name)(self.as_raw(), name.as_ptr()) }
     }
 }
 

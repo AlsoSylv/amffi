@@ -15,6 +15,7 @@ use crate::{
 };
 
 #[repr(transparent)]
+#[derive(Clone)]
 pub struct AMFDump(<Self as Deref>::Target);
 
 #[repr(C)]
@@ -98,6 +99,8 @@ impl Interface for AMFDump {
         self.0.as_raw_interface()
     }
 }
+
+impl super::interface::sealed::Sealed for AMFDump {}
 
 impl Deref for AMFDump {
     type Target = AMFInterface;
